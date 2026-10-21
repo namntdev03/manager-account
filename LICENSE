@@ -1,0 +1,56 @@
+Manager Account - Source-Available License
+
+Copyright (c) 2026 Nguyen Thanh Nam. All rights reserved.
+
+The source code and compiled applications of "Manager Account" (the
+"Software") are made publicly visible for transparency and personal use only.
+They are NOT open source. Except for the permissions expressly granted below,
+all rights are reserved by the copyright holder.
+
+1. PERMITTED USE
+   You may, free of charge:
+   a) download and run the official releases of the Software for your own
+      personal or internal business use;
+   b) read the source code for learning, review and security auditing;
+   c) report issues and suggest changes to the copyright holder.
+
+2. PROHIBITED USE
+   Without prior written permission from the copyright holder, you may NOT:
+   a) copy, fork-and-republish, modify, adapt or create derivative works of
+      the Software or any substantial part of its source code, design or
+      user interface;
+   b) distribute, sublicense, sell, rent, host or otherwise make the Software
+      (or any copy or derivative of it) available to others, whether free of
+      charge or for a fee;
+   c) present the Software, or any part of it, as your own work, or remove,
+      alter or obscure any copyright, license or attribution notice;
+   d) use the name "Manager Account", its logo or its branding in a way that
+      suggests your product is the official one or is endorsed by the author;
+   e) use the Software or its source code to train, fine-tune or evaluate
+      machine-learning models intended to reproduce it.
+
+3. THIRD-PARTY COMPONENTS
+   The Software bundles third-party material that remains under its own terms:
+   - Plus Jakarta Sans font, SIL Open Font License 1.1 (see src/fonts/LICENSE-OFL.txt);
+   - Brand icons from Simple Icons (CC0 1.0). GitHub, GitLab and Bitbucket
+     names and logos are trademarks of their respective owners and are used
+     only to identify those services;
+   - Open-source libraries (Tauri, Rust crates, etc.) under their respective licenses.
+
+4. TERMINATION
+   Any breach of this license automatically terminates the permissions granted
+   in Section 1. The copyright holder may take any action permitted by law,
+   including requesting removal of infringing copies from hosting platforms.
+
+5. NO WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE
+   USE OF THE SOFTWARE.
+
+---------------------------------------------------------------------------
+Tóm tắt (tiếng Việt, không thay thế nội dung tiếng Anh ở trên):
+Được dùng app cho cá nhân/nội bộ và đọc mã nguồn để tham khảo. KHÔNG được sao
+chép, sửa, phát hành lại, bán, hay nhận là sản phẩm của mình. Mọi quyền khác
+thuộc về tác giả.

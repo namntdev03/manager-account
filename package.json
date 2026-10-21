@@ -2,6 +2,7 @@
   "name": "manager-account",
   "version": "0.1.0",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "packageManager": "pnpm@9.15.0",
   "description": "Chuyển nhanh giữa nhiều tài khoản Git (macOS, Windows, Linux)",
   "scripts": {

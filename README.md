@@ -97,3 +97,9 @@ src-tauri/tauri.conf.json
 - Nếu máy chưa cấu hình `credential.helper`, app tự đặt mặc định: `osxkeychain` (macOS), `manager` (Windows),
   `libsecret` nếu có (Linux), nếu không có thì `store` (lưu file `~/.git-credentials`, không mã hoá).
 - Nếu bạn dùng `includeIf` trong `~/.gitconfig`, giá trị trong `includeIf` có thể ghi đè cấu hình toàn máy do app đặt.
+
+## Giấy phép
+
+Mã nguồn được công khai để xem và tham khảo, **không phải phần mềm mã nguồn mở**.
+Bạn được dùng app cho mục đích cá nhân/nội bộ; **không được** sao chép, sửa, phát hành lại, bán hoặc nhận là sản phẩm của mình.
+Chi tiết trong file [LICENSE](LICENSE). Copyright © 2026 Nguyen Thanh Nam.
