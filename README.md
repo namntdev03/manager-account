@@ -17,6 +17,25 @@ Mỗi tài khoản (profile) do bạn tự nhập một lần: `user.name`, `use
   Có thêm tuỳ chọn tự đổi remote SSH ⇄ HTTPS cho khớp kiểu đăng nhập.
 - **Test kết nối**: SSH chạy `ssh -T git@<host>`; token gọi API `/user` của GitHub/GitLab để xem token thuộc tài khoản nào.
 
+## Quyền riêng tư: dữ liệu chỉ nằm trên máy bạn
+
+- Không có server của app, không tài khoản, không thống kê. Tài khoản, token và cấu hình chỉ nằm trên máy.
+- Giao diện, font và icon đều đóng gói sẵn trong app; cửa sổ app bị khoá bằng CSP, không tải gì từ internet.
+- App chỉ kết nối mạng trong **hai trường hợp**:
+  1. **Kiểm tra bản cập nhật** (khi mở app, tắt được ở *Cài đặt*): một yêu cầu `GET` tới
+     `api.github.com/repos/namntdev03/manager-account/releases/latest`. **Không gửi** bất kỳ dữ liệu nào của bạn
+     (tên, email, token, key, danh sách tài khoản, đường dẫn repo). GitHub chỉ thấy IP như mọi lượt truy cập web.
+  2. **Khi bạn bấm “Test kết nối”** trên một tài khoản: SSH tới `git@<host>`, hoặc gọi API `/user` của GitHub/GitLab
+     để xác minh token. Chỉ tới đúng nền tảng của tài khoản đó.
+- Việc `git push/pull` do chính git thực hiện, không đi qua app.
+- Bản mới chỉ được **thông báo**; bạn tự bấm để mở trang tải về, app không tự tải hay tự cài.
+
+## Phát hành bản mới
+
+1. Tăng `version` trong `src-tauri/tauri.conf.json` (và `Cargo.toml`, `package.json` cho khớp), ví dụ `0.2.0`.
+2. Commit, rồi tạo tag và push: `git tag v0.2.0 && git push origin v0.2.0`.
+3. GitHub Actions build cả 3 hệ điều hành và đăng lên **Releases**; app của người dùng sẽ báo có bản mới.
+
 ## Bảo mật
 
 - Token nằm trong kho bảo mật của hệ điều hành (crate `keyring`), **không** ghi vào `profiles.json`.

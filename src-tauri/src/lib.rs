@@ -7,6 +7,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Manager;
 
 const KEYRING_SERVICE: &str = "manager-account";
+/// Repo GitHub chứa các bản phát hành (Releases) của app
+const UPDATE_REPO: &str = "namntdev03/manager-account";
 
 // ───────────────────────── Kiểu dữ liệu ─────────────────────────
 
@@ -59,6 +61,16 @@ struct Current {
 struct TestResult {
     ok: bool,
     message: String,
+}
+
+#[derive(Serialize)]
+struct UpdateInfo {
+    current: String,
+    latest: String,
+    has_update: bool,
+    none_published: bool,
+    url: String,
+    notes: String,
 }
 
 struct Out {
@@ -670,6 +682,99 @@ async fn test_profile(app: tauri::AppHandle, id: String) -> Result<TestResult, S
     }
 }
 
+// ───────────────────────── Kiểm tra bản cập nhật ─────────────────────────
+
+fn ver_parts(s: &str) -> Vec<u64> {
+    s.trim()
+        .trim_start_matches(['v', 'V'])
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|x| !x.is_empty())
+        .map(|x| x.parse().unwrap_or(0))
+        .collect()
+}
+
+fn is_newer(latest: &str, current: &str) -> bool {
+    let a = ver_parts(latest);
+    let b = ver_parts(current);
+    for i in 0..a.len().max(b.len()) {
+        let x = *a.get(i).unwrap_or(&0);
+        let y = *b.get(i).unwrap_or(&0);
+        if x != y {
+            return x > y;
+        }
+    }
+    false
+}
+
+/// Chỉ gửi một yêu cầu GET tới GitHub Releases. Không gửi bất kỳ dữ liệu nào của người dùng.
+#[tauri::command]
+async fn check_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
+    let current = app.package_info().version.to_string();
+    let cfg = format!(
+        "url = \"https://api.github.com/repos/{UPDATE_REPO}/releases/latest\"\nheader = \"User-Agent: manager-account\"\nheader = \"Accept: application/vnd.github+json\"\n"
+    );
+    let mut c = new_cmd("curl");
+    c.args(["-sS", "-m", "10", "-K", "-", "-w", "\n%{http_code}"]);
+    let o = run_cmd(c, Some(cfg.as_str()))?;
+    if !o.ok {
+        return Err(format!("Không kết nối được tới GitHub: {}", o.stderr));
+    }
+    let (body, code) = o.stdout.rsplit_once('\n').unwrap_or((o.stdout.as_str(), ""));
+    let mut info = UpdateInfo {
+        current: current.clone(),
+        latest: String::new(),
+        has_update: false,
+        none_published: false,
+        url: format!("https://github.com/{UPDATE_REPO}/releases"),
+        notes: String::new(),
+    };
+    match code.trim() {
+        "200" => {
+            let v: serde_json::Value = serde_json::from_str(body).unwrap_or(serde_json::Value::Null);
+            let tag = v["tag_name"].as_str().unwrap_or("").to_string();
+            if tag.is_empty() {
+                return Err("GitHub trả về dữ liệu không đọc được.".into());
+            }
+            info.has_update = is_newer(&tag, &current);
+            if let Some(u) = v["html_url"].as_str() {
+                info.url = u.to_string();
+            }
+            info.notes = v["body"].as_str().unwrap_or("").chars().take(600).collect();
+            info.latest = tag;
+            Ok(info)
+        }
+        "404" => {
+            info.none_published = true;
+            Ok(info)
+        }
+        "403" | "429" => Err("GitHub tạm giới hạn số lần kiểm tra, hãy thử lại sau ít phút.".into()),
+        c => Err(format!("GitHub phản hồi bất thường (HTTP {c}).")),
+    }
+}
+
+/// Mở trang tải bản mới bằng trình duyệt mặc định (chỉ cho phép đúng repo của app)
+#[tauri::command]
+async fn open_release_page(url: String) -> Result<(), String> {
+    let prefix = format!("https://github.com/{UPDATE_REPO}");
+    if !(url == prefix || url.starts_with(&format!("{prefix}/"))) {
+        return Err("Địa chỉ không hợp lệ.".into());
+    }
+    let c = if cfg!(target_os = "macos") {
+        let mut c = new_cmd("open");
+        c.arg(&url);
+        c
+    } else if cfg!(target_os = "windows") {
+        let mut c = new_cmd("rundll32");
+        c.arg("url.dll,FileProtocolHandler").arg(&url);
+        c
+    } else {
+        let mut c = new_cmd("xdg-open");
+        c.arg(&url);
+        c
+    };
+    run_cmd(c, None).map(|_| ())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -681,7 +786,9 @@ pub fn run() {
             delete_profile,
             apply_profile,
             get_current,
-            test_profile
+            test_profile,
+            check_update,
+            open_release_page
         ])
         .run(tauri::generate_context!())
         .expect("lỗi khi chạy ứng dụng Tauri");

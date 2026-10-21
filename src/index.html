@@ -20,6 +20,7 @@
           <div class="sub" id="subNav"></div>
         </div>
         <button class="nav-item" data-page="log"><i data-i="history"></i><span>Nhật ký</span><em id="logCount" hidden></em></button>
+        <button class="nav-item" data-page="settings"><i data-i="sliders"></i><span>Cài đặt</span></button>
       </nav>
     </div>
   </aside>
@@ -40,6 +41,14 @@
         <button type="button" id="addBtn" class="btn dark"><i data-i="plus"></i><span>Thêm tài khoản</span></button>
       </div>
     </header>
+
+    <div class="update-bar" id="updateBar" hidden>
+      <div class="upd-txt"><strong id="updTitle"></strong><small id="updSub"></small></div>
+      <div class="upd-actions">
+        <button type="button" class="btn-w" id="updOpen">Xem &amp; tải về</button>
+        <button type="button" class="btn-g sm" id="updLater">Để sau</button>
+      </div>
+    </div>
 
     <section id="page-accounts">
       <div class="repo-bar" id="repoBar" hidden>
@@ -65,6 +74,33 @@
           <button type="button" id="clearLog" class="btn-g sm">Xoá nhật ký</button>
         </div>
         <pre id="log"></pre>
+      </div>
+    </section>
+
+    <section id="page-settings" hidden>
+      <div class="set-card">
+        <div class="set-row">
+          <div>
+            <h3>Phiên bản</h3>
+            <p id="verText">Manager Account</p>
+          </div>
+          <button type="button" id="chkBtn" class="btn dark"><i data-i="refresh"></i><span>Kiểm tra cập nhật</span></button>
+        </div>
+        <p class="set-status" id="chkStatus" hidden></p>
+        <hr class="set-sep" />
+        <label class="check">
+          <input type="checkbox" id="autoUpd" />
+          <span>Tự kiểm tra bản mới khi mở app</span>
+        </label>
+        <div class="privacy">
+          <strong>Dữ liệu của bạn ở lại trên máy</strong>
+          <ul>
+            <li>Khi kiểm tra cập nhật, app chỉ gửi <b>một yêu cầu đọc (GET)</b> tới <code>api.github.com/repos/namntdev03/manager-account/releases/latest</code>.</li>
+            <li>App <b>không gửi</b> tên, email, token, SSH key, danh sách tài khoản, đường dẫn repo hay bất kỳ dữ liệu nào của bạn.</li>
+            <li>GitHub chỉ thấy địa chỉ IP và yêu cầu như mọi lượt truy cập web thông thường. Bạn có thể tắt tự kiểm tra ở trên.</li>
+            <li>Tài khoản, token và cấu hình chỉ nằm trên máy này (token trong kho bảo mật của hệ điều hành).</li>
+          </ul>
+        </div>
       </div>
     </section>
   </main>

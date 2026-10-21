@@ -24,6 +24,8 @@ jobs:
             args: ""
             rust_targets: ""
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -51,8 +53,22 @@ jobs:
 
       - run: pnpm install --no-frozen-lockfile
 
-      - name: Build
+      - name: Build (chạy thủ công - chỉ build)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         run: pnpm tauri build ${{ matrix.args }}
+
+      - name: Build và đăng lên GitHub Releases (khi push tag v*)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Manager Account ${{ github.ref_name }}"
+          releaseBody: "Tải file cài đặt cho macOS, Windows, Linux ở mục Assets bên dưới."
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
 
       - uses: actions/upload-artifact@v4
         with:

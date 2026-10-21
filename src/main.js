@@ -21,6 +21,7 @@
     arrow: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
     layout: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
     x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    sliders: '<line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/>',
     chevron: '<path d="m6 9 6 6 6-6"/>',
   };
   const icon = (n, c = "") =>
@@ -46,6 +47,7 @@
   const PAGES = {
     accounts: { title: "Tài khoản", sub: "Chọn tài khoản Git để dùng ngay" },
     log: { title: "Nhật ký", sub: "Lịch sử các thao tác đổi tài khoản trong phiên này" },
+    settings: { title: "Cài đặt", sub: "Phiên bản, cập nhật và quyền riêng tư" },
   };
 
   // Nền tảng: thêm nền tảng mới chỉ cần thêm 1 dòng vào đây
@@ -61,6 +63,9 @@
     page: "accounts",
     platform: store.get("platform", "all"),
     accOpen: store.get("accOpen", "1") === "1",
+    autoUpd: store.get("autoUpd", "1") === "1",
+    version: "",
+    update: null,
     profiles: [],
     current: null,
     err: "",
@@ -210,6 +215,7 @@
     document.querySelectorAll("#nav .nav-item").forEach((b) => b.classList.toggle("active", b.dataset.page === S.page));
     $("#page-accounts").hidden = S.page !== "accounts";
     $("#page-log").hidden = S.page !== "log";
+    $("#page-settings").hidden = S.page !== "settings";
     const curPlat = platformList().find((p) => p.id === S.platform);
     $("#pageTitle").textContent =
       S.page === "accounts" && curPlat ? `${PAGES.accounts.title} · ${curPlat.name}` : PAGES[S.page].title;
@@ -219,6 +225,16 @@
     $("#addBtn").hidden = S.page !== "accounts";
 
     $("#refreshBtn").querySelector(".ic").classList.toggle("spin", S.busy === "refresh");
+
+    const u = S.update;
+    const showUpd = !!(u && u.has_update && store.get("dismiss", "") !== u.latest);
+    $("#updateBar").hidden = !showUpd;
+    if (showUpd) {
+      $("#updTitle").textContent = `Có bản mới ${u.latest}`;
+      $("#updSub").textContent = `Bạn đang dùng v${String(u.current).replace(/^v/, "")}`;
+    }
+    $("#verText").textContent = `Manager Account${S.version ? " v" + String(S.version).replace(/^v/, "") : ""}`;
+    $("#autoUpd").checked = S.autoUpd;
   }
 
   function render() {
@@ -385,6 +401,45 @@
     }
   }
 
+  // ───────── cập nhật app (chỉ GET tới GitHub Releases, không gửi dữ liệu người dùng) ─────────
+  function setStatus(msg, kind = "") {
+    const el = $("#chkStatus");
+    el.hidden = !msg;
+    el.textContent = msg || "";
+    el.className = "set-status " + kind;
+  }
+  async function checkUpdate(manual) {
+    const btn = $("#chkBtn");
+    if (manual) {
+      btn.disabled = true;
+      setStatus("Đang kiểm tra…");
+    }
+    try {
+      const r = await invoke("check_update");
+      S.version = r.current;
+      S.update = r;
+      let msg, kind = "ok";
+      if (r.none_published) msg = "Chưa có bản phát hành nào trên GitHub.";
+      else if (r.has_update) msg = `Có bản mới ${r.latest} (bạn đang dùng v${r.current}).`;
+      else msg = `Bạn đang dùng bản mới nhất (v${r.current}).`;
+      if (manual) {
+        store.set("dismiss", "");
+        setStatus(msg, kind);
+        toast(msg, "ok");
+      }
+      log(`Kiểm tra cập nhật: ${msg}`);
+    } catch (e) {
+      if (manual) {
+        setStatus(String(e), "bad");
+        toast(String(e), "bad");
+      }
+      log(`✗ Kiểm tra cập nhật lỗi: ${e}`);
+    } finally {
+      btn.disabled = false;
+      render();
+    }
+  }
+
   async function doRefresh() {
     S.busy = "refresh";
     renderChrome();
@@ -426,6 +481,18 @@
     store.set("convert", S.convert ? "1" : "0");
   });
   $("#pickRepo").addEventListener("click", pickRepo);
+  $("#chkBtn").addEventListener("click", () => checkUpdate(true));
+  $("#autoUpd").addEventListener("change", (e) => {
+    S.autoUpd = e.target.checked;
+    store.set("autoUpd", S.autoUpd ? "1" : "0");
+  });
+  $("#updOpen").addEventListener("click", async () => {
+    try { await invoke("open_release_page", { url: S.update.url }); } catch (e) { toast(String(e), "bad"); }
+  });
+  $("#updLater").addEventListener("click", () => {
+    store.set("dismiss", S.update?.latest || "");
+    renderChrome();
+  });
   $("#clearRepo").addEventListener("click", async () => {
     S.repo = "";
     store.set("repo", "");
@@ -454,6 +521,7 @@
   // ───────── khởi động ─────────
   (async () => {
     try { S.home = await invoke("user_home"); } catch { /* bỏ qua */ }
+    try { S.version = await T.app.getVersion(); } catch { /* bỏ qua */ }
     render();
     try {
       await refresh();
@@ -461,5 +529,6 @@
       S.err = String(e);
       render();
     }
+    if (S.autoUpd) checkUpdate(false);
   })();
 })();
