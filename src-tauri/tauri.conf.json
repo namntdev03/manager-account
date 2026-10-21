@@ -11,7 +11,9 @@
     "windows": [
       {
         "label": "main",
-        "title": "Manager Account - Git",
+        "title": "Manager Account",
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
         "width": 1120,
         "height": 780,
         "minWidth": 900,

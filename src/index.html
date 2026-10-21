@@ -4,9 +4,19 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Manager Account</title>
+  <link rel="stylesheet" href="vendor/xterm/xterm.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <!-- vùng kéo cửa sổ (chỉ macOS, thanh tiêu đề dạng overlay) -->
+  <div class="drag drag-s" data-tauri-drag-region></div>
+  <div class="drag drag-m" data-tauri-drag-region></div>
+  <!-- nút thu nhỏ / phóng to / đóng tự vẽ (chỉ Windows và Linux, vì cửa sổ không có thanh tiêu đề hệ thống) -->
+  <div class="wc" id="wc">
+    <button type="button" data-wc="min" title="Thu nhỏ" aria-label="Thu nhỏ"><svg viewBox="0 0 10 10"><path d="M0 5h10" stroke="currentColor" fill="none"/></svg></button>
+    <button type="button" data-wc="max" title="Phóng to" aria-label="Phóng to"><svg viewBox="0 0 10 10"><rect x=".5" y=".5" width="9" height="9" stroke="currentColor" fill="none"/></svg></button>
+    <button type="button" data-wc="close" class="x" title="Đóng" aria-label="Đóng"><svg viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" fill="none"/></svg></button>
+  </div>
   <!-- SIDEBAR -->
   <aside class="side">
     <div>
@@ -19,7 +29,8 @@
           <button class="nav-item active" id="navAcc" data-page="accounts"><i data-i="users"></i><span>Tài khoản</span><i data-i="chevron" class="chev"></i></button>
           <div class="sub" id="subNav"></div>
         </div>
-        <button class="nav-item" data-page="log"><i data-i="history"></i><span>Nhật ký</span><em id="logCount" hidden></em></button>
+        <button class="nav-item" data-page="hosts"><i data-i="server"></i><span>SSH host</span></button>
+        <button class="nav-item" data-page="stats"><i data-i="activity"></i><span>Hiệu năng</span></button>
         <button class="nav-item" data-page="settings"><i data-i="sliders"></i><span>Cài đặt</span></button>
         <button class="nav-item" data-page="about"><i data-i="info"></i><span>Giới thiệu</span></button>
       </nav>
@@ -31,7 +42,7 @@
     <header class="head">
       <div>
         <h1 id="pageTitle">Tài khoản</h1>
-        <p id="pageSub">Chọn tài khoản Git để dùng ngay</p>
+        <p id="pageSub">Chọn tài khoản để dùng ngay</p>
       </div>
       <div class="controls">
         <div class="seg" id="scopeSeg">
@@ -39,7 +50,6 @@
           <button type="button" data-scope="repo">Một repo</button>
         </div>
         <button type="button" id="refreshBtn" class="btn ghost"><i data-i="refresh"></i><span>Làm mới</span></button>
-        <button type="button" id="addBtn" class="btn dark"><i data-i="plus"></i><span>Thêm tài khoản</span></button>
       </div>
     </header>
 
@@ -51,6 +61,8 @@
         <button type="button" class="btn-g sm" id="updLater">Để sau</button>
       </div>
     </div>
+
+    <details class="guide" id="guide" hidden></details>
 
     <section id="page-accounts">
       <div class="repo-bar" id="repoBar" hidden>
@@ -67,16 +79,31 @@
         <button type="button" id="pickRepo" class="btn dark">Chọn thư mục…</button>
       </div>
       <div class="cards" id="cards"></div>
+      <div class="set-card rules" id="rulesBox" hidden>
+        <div class="set-row">
+          <div>
+            <h3>Quy tắc theo thư mục</h3>
+            <p>Gán một thư mục cho một tài khoản. Mọi repo nằm trong thư mục đó tự dùng đúng tài khoản, không cần bấm “Dùng tài khoản này”.</p>
+          </div>
+          <button type="button" id="ruleAdd" class="btn dark"><i data-i="plus"></i><span>Thêm quy tắc</span></button>
+        </div>
+        <div id="ruleList"></div>
+      </div>
     </section>
 
-    <section id="page-log" hidden>
-      <div class="glass-card log-card">
-        <div class="card-head">
-          <h3>Nhật ký thao tác</h3>
-          <button type="button" id="clearLog" class="btn-g sm">Xoá nhật ký</button>
-        </div>
-        <pre id="log"></pre>
+    <section id="page-hosts" hidden>
+      <div class="tabs" id="termTabs" hidden></div>
+      <div id="hostList"><div class="cards" id="hostCards"></div></div>
+      <div id="termView" hidden></div>
+    </section>
+
+    <section id="page-stats" hidden>
+      <div class="stat-grid" id="statGrid"></div>
+      <div class="set-card stat-chart">
+        <div class="set-row"><div><h3>RAM của app theo thời gian</h3><p id="statNote"></p></div></div>
+        <svg id="statSpark" viewBox="0 0 300 70" preserveAspectRatio="none"></svg>
       </div>
+      <div class="set-card" id="statKids" hidden></div>
     </section>
 
     <section id="page-settings" hidden>
@@ -89,6 +116,17 @@
           <button type="button" id="chkBtn" class="btn dark"><i data-i="refresh"></i><span>Kiểm tra cập nhật</span></button>
         </div>
         <p class="set-status" id="chkStatus" hidden></p>
+        <hr class="set-sep" />
+        <div class="set-row">
+          <div>
+            <h3>Ngôn ngữ</h3>
+            <p>Chọn ngôn ngữ hiển thị của app</p>
+          </div>
+          <div class="seg" id="langSeg">
+            <button type="button" data-lang="vi">Tiếng Việt</button>
+            <button type="button" data-lang="en">English</button>
+          </div>
+        </div>
         <hr class="set-sep" />
         <label class="check">
           <input type="checkbox" id="autoUpd" />
@@ -173,22 +211,43 @@
         <h3 id="dlgTitle">Thêm tài khoản</h3>
         <p>Bạn tự nhập một lần, sau đó chỉ cần bấm chọn để đổi.</p>
       </div>
+      <div class="dlg-body">
 
       <div class="two">
         <label>Tên hiển thị
           <input id="f_name" placeholder="Ví dụ: Công ty" required />
         </label>
-        <label>Host
-          <input id="f_host" list="hosts" value="github.com" required />
-          <datalist id="hosts">
-            <option value="github.com"></option>
-            <option value="gitlab.com"></option>
-            <option value="bitbucket.org"></option>
-          </datalist>
+        <label id="hostLabel">Host
+          <input id="f_host" value="github.com" required />
+          <span class="chips" data-for="f_host"><button type="button" data-v="github.com">GitHub</button><button type="button" data-v="gitlab.com">GitLab</button><button type="button" data-v="bitbucket.org">Bitbucket</button></span>
+        </label>
+        <label id="registryLabel" hidden>Registry
+          <input id="f_registry" placeholder="https://registry.npmjs.org/" />
+          <span class="chips" data-for="f_registry"><button type="button" data-v="https://registry.npmjs.org/">npmjs</button><button type="button" data-v="https://npm.pkg.github.com/">GitHub Packages</button></span>
         </label>
       </div>
 
-      <div class="two">
+      <div id="sshFields" hidden>
+        <label>Username SSH
+          <input id="f_sshuser" placeholder="root, ubuntu, deploy…" />
+        </label>
+        <label>Mật khẩu SSH (tuỳ chọn)
+          <div class="input-row">
+            <input id="f_sshpass" type="password" placeholder="Nhập mật khẩu của user này" />
+            <button type="button" id="viewPass" class="btn ghost" hidden>Hiện</button>
+          </div>
+        </label>
+        <p class="hint">Bạn có thể dùng mật khẩu, key (RSA, ED25519, ECDSA… mọi loại key OpenSSH) hoặc cả hai. Mật khẩu lưu trong kho bảo mật của hệ điều hành và được tự điền khi kết nối. Không có cả hai thì terminal sẽ hỏi.</p>
+      </div>
+
+      <div id="npmFields" hidden>
+        <label>Scope (tuỳ chọn)
+          <input id="f_scope" placeholder="@congty" />
+        </label>
+        <p class="hint">Để trống nếu muốn dùng registry này cho mọi package. Khi bấm “Dùng tài khoản này”, app ghi token vào file <code>.npmrc</code> (toàn máy hoặc trong repo) đúng như npm yêu cầu, nên file này chứa token dạng chữ thường. Không commit <code>.npmrc</code> có token lên git.</p>
+      </div>
+
+      <div class="two" id="gitIdent">
         <label>user.name (tên trên commit)
           <input id="f_uname" required />
         </label>
@@ -197,8 +256,8 @@
         </label>
       </div>
 
-      <fieldset>
-        <legend>Cách đăng nhập</legend>
+      <fieldset id="authSet">
+        <legend id="authLegend">Cách đăng nhập</legend>
         <div class="seg" id="authSeg">
           <button type="button" data-auth="ssh">SSH key</button>
           <button type="button" data-auth="token">Personal Access Token</button>
@@ -212,24 +271,48 @@
             </div>
           </label>
           <label>Hoặc dán nội dung private key
-            <textarea id="f_keytext" rows="4" spellcheck="false"
+            <textarea id="f_keytext" rows="3" spellcheck="false"
               placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;..."></textarea>
           </label>
+          <div id="keyViewBox" hidden>
+            <textarea id="keyView" rows="4" readonly spellcheck="false"></textarea>
+          </div>
+          <div class="input-row">
+            <button type="button" id="viewKey" class="btn ghost" hidden>Xem key đã lưu</button>
+            <button type="button" id="copyKey" class="btn ghost" hidden>Sao chép</button>
+          </div>
+          <div class="input-row">
+            <button type="button" id="genKey" class="btn dark">Tạo key mới (ed25519)</button>
+            <button type="button" id="getPub" class="btn ghost">Xem public key</button>
+          </div>
+          <div id="pubBox" hidden>
+            <label>Public key (dán vào GitHub/GitLab, không phải bí mật)
+              <textarea id="pubKey" rows="3" readonly spellcheck="false"></textarea>
+            </label>
+            <div class="input-row">
+              <button type="button" id="copyPub" class="btn ghost">Sao chép public key</button>
+              <button type="button" id="openKeyPage" class="btn ghost">Mở trang thêm key…</button>
+            </div>
+          </div>
           <p class="hint">Nếu dán key, app lưu thành file riêng (quyền 600) trong thư mục dữ liệu của app. Key có passphrase cần nạp vào ssh-agent trước.</p>
         </div>
 
         <div id="authToken" class="auth-box" hidden>
-          <label>Username đăng nhập
+          <label id="loginLabel">Username đăng nhập
             <input id="f_login" placeholder="Tên tài khoản trên GitHub/GitLab" />
           </label>
-          <label>Personal Access Token
-            <input id="f_token" type="password" placeholder="ghp_… / glpat-…" />
+          <label><span id="tokenLbl">Personal Access Token</span>
+            <div class="input-row">
+              <input id="f_token" type="password" placeholder="ghp_… / glpat-…" />
+              <button type="button" id="viewToken" class="btn ghost" hidden>Hiện</button>
+            </div>
           </label>
-          <p class="hint">Token được lưu trong kho bảo mật của hệ điều hành (Keychain / Credential Manager / Secret Service), không ghi vào file thường.</p>
+          <p class="hint" id="tokenHint">Token được lưu trong kho bảo mật của hệ điều hành (Keychain / Credential Manager / Secret Service), không ghi vào file thường.</p>
         </div>
       </fieldset>
 
       <p class="error" id="formErr" hidden></p>
+      </div>
       <div class="actions">
         <button type="button" id="cancel" class="btn ghost">Huỷ</button>
         <button type="submit" class="btn dark" id="saveBtn">Lưu</button>
@@ -237,7 +320,98 @@
     </form>
   </dialog>
 
+  <!-- QUY TẮC THEO THƯ MỤC -->
+  <dialog id="ruleDlg">
+    <div class="dlg-head">
+      <h3>Thêm quy tắc theo thư mục</h3>
+      <p>Repo nằm trong thư mục này (kể cả thư mục con) sẽ tự dùng tài khoản bạn chọn.</p>
+    </div>
+    <div class="dlg-body">
+      <div>
+        <div class="host-sec">Thư mục</div>
+        <div class="rule-pick">
+          <code id="rulePath">Chưa chọn thư mục</code>
+          <button type="button" id="rulePick" class="btn ghost">Chọn thư mục…</button>
+        </div>
+      </div>
+      <div>
+        <div class="host-sec">Tài khoản</div>
+        <div class="acc-pick" id="ruleAccs"></div>
+      </div>
+      <p class="error" id="ruleErr" hidden></p>
+    </div>
+    <div class="actions">
+      <button type="button" id="ruleCancel" class="btn ghost">Huỷ</button>
+      <button type="button" id="ruleSave" class="btn dark">Lưu quy tắc</button>
+    </div>
+  </dialog>
+
+  <!-- QUẢN LÝ FILE (SFTP) -->
+  <dialog id="ftpDlg" class="wide">
+    <div class="dlg-head">
+      <h3 id="ftpTitle">Tệp trên server</h3>
+      <p>Duyệt thư mục, tải file lên hoặc tải về qua SSH, dùng đúng tài khoản đã chọn ở thẻ host.</p>
+    </div>
+    <div class="dlg-body">
+      <div class="ftp-bar">
+        <button type="button" class="btn-g" id="ftpUp" title="Thư mục cha"><i data-i="arrow"></i></button>
+        <input id="ftpPath" spellcheck="false" />
+        <button type="button" class="btn-g" id="ftpGo" title="Mở"><i data-i="refresh"></i></button>
+      </div>
+      <div class="ftp-bar">
+        <input id="ftpQ" placeholder="Lọc theo tên…" spellcheck="false" />
+        <label class="ftp-chk"><input type="checkbox" id="ftpHidden" /> <span>Hiện file ẩn</span></label>
+      </div>
+      <div class="ftp-list" id="ftpList"></div>
+      <p class="ftp-hint">Kéo thả file hoặc thư mục từ máy vào đây để tải lên thư mục đang mở.</p>
+      <p class="error" id="ftpErr" hidden></p>
+      <div class="ftp-busy" id="ftpBusy" hidden><span>Đang xử lý…</span></div>
+    </div>
+    <div class="actions">
+      <button type="button" id="ftpMkdir" class="btn ghost">Thư mục mới</button>
+      <button type="button" id="ftpUploadDir" class="btn ghost">Tải thư mục lên</button>
+      <button type="button" id="ftpUpload" class="btn dark">Tải file lên</button>
+      <button type="button" id="ftpClose" class="btn ghost">Đóng</button>
+    </div>
+  </dialog>
+
+  <!-- FORM SSH HOST -->
+  <dialog id="hostDlg">
+    <form id="hostForm" autocomplete="off">
+      <div class="dlg-head">
+        <h3 id="hostDlgTitle">Thêm SSH host</h3>
+        <p>Chỉ lưu địa chỉ máy chủ. Tài khoản (user, key) chọn lúc kết nối.</p>
+      </div>
+      <div class="dlg-body">
+      <div class="two">
+        <label>Tên hiển thị
+          <input id="h_name" placeholder="Ví dụ: Server production" required />
+        </label>
+        <label>Địa chỉ (IP hoặc domain)
+          <input id="h_addr" placeholder="103.27.239.224" required />
+        </label>
+      </div>
+      <div class="two">
+        <label>Port
+          <input id="h_port" type="number" min="1" max="65535" value="22" />
+        </label>
+        <label>Ghi chú (tuỳ chọn)
+          <input id="h_note" placeholder="Ví dụ: cụm gurucall" />
+        </label>
+      </div>
+      <p class="error" id="hostErr" hidden></p>
+      </div>
+      <div class="actions">
+        <button type="button" id="hostCancel" class="btn ghost">Huỷ</button>
+        <button type="submit" class="btn dark" id="hostSave">Lưu</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="vendor/xterm/xterm.js"></script>
+  <script src="vendor/xterm/addon-fit.js"></script>
   <script src="license.js"></script>
+  <script src="i18n.js"></script>
   <script src="main.js"></script>
 </body>
 </html>

@@ -16,6 +16,9 @@ Mỗi tài khoản (profile) do bạn tự nhập một lần: `user.name`, `use
 - **Một repo**: ghi vào `.git/config` của repo bạn chọn (`--local`), repo khác không bị ảnh hưởng.
   Có thêm tuỳ chọn tự đổi remote SSH ⇄ HTTPS cho khớp kiểu đăng nhập.
 - **Test kết nối**: SSH chạy `ssh -T git@<host>`; token gọi API `/user` của GitHub/GitLab để xem token thuộc tài khoản nào.
+- **npm registry**: lưu nhiều tài khoản npm (npmjs, GitHub Packages, registry riêng, có thể theo scope). Bấm dùng sẽ ghi token vào `~/.npmrc` (toàn máy) hoặc `.npmrc` của repo; token gốc vẫn nằm trong Keychain.
+- **SSH host**: lưu danh sách máy chủ (địa chỉ, port, ghi chú) và các **tài khoản SSH** (username + key, key tuỳ chọn) ở mục Tài khoản → SSH. Trong menu SSH host, chọn tài khoản ở ô **Kết nối bằng** rồi bấm **Kết nối**: một terminal mở ngay trong app (tab) và chạy `ssh`, có thể mở nhiều tab cùng lúc. Danh sách host lưu ở `hosts.json` trong thư mục dữ liệu của app, không gửi đi đâu.
+- **Ngôn ngữ**: Tiếng Việt và English (Cài đặt → Ngôn ngữ; mặc định theo ngôn ngữ hệ thống). Thêm ngôn ngữ mới: thêm một bảng trong `src/i18n.js`.
 
 ## Quyền riêng tư: dữ liệu chỉ nằm trên máy bạn
 
@@ -137,3 +140,9 @@ Chi tiết trong file [LICENSE](LICENSE). Copyright © 2026 Nguyen Thanh Nam.
 
 App hiển thị giấy phép trong menu **Giới thiệu** từ file `src/license.js`, được sinh tự động từ `LICENSE`
 (`pnpm dev` / `pnpm build` tự chạy `scripts/sync-license.mjs`). Sửa `LICENSE` xong thì chạy lại một trong hai lệnh đó rồi commit cả `src/license.js`.
+
+
+## Thành phần bên thứ ba
+
+- [xterm.js](https://github.com/xtermjs/xterm.js) (MIT) cho terminal trong app, đóng gói sẵn trong `src/vendor/xterm`, kèm giấy phép `LICENSE-xterm.txt`.
+- Font Plus Jakarta Sans (OFL), logo nền tảng từ Simple Icons (CC0).

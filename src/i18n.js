@@ -1,0 +1,463 @@
+// Đa ngôn ngữ: Tiếng Việt (gốc, dùng làm khoá) và English.
+// Thêm ngôn ngữ mới: thêm một bảng vào LANGS + một nút trong Cài đặt.
+(() => {
+  const EN = {
+    // ── thanh bên & tiêu đề
+    "Tài khoản": "Accounts",
+    "Nhật ký": "Log",
+    "Cài đặt": "Settings",
+    "Giới thiệu": "About",
+    "Chọn tài khoản để dùng ngay": "Pick an account to use right away",
+    "Lịch sử các thao tác đổi tài khoản trong phiên này": "History of account switches in this session",
+    "Phiên bản, cập nhật và quyền riêng tư": "Version, updates and privacy",
+    "App này làm gì, chính sách dữ liệu và giấy phép": "What this app does, data policy and license",
+    "Tất cả": "All",
+    // ── điều khiển
+    "Toàn máy": "Whole machine",
+    "Một repo": "One repo",
+    "Làm mới": "Refresh",
+    "Thêm tài khoản": "Add account",
+    "Sửa tài khoản": "Edit account",
+    "Cập nhật ngay": "Update now",
+    "Chi tiết": "Details",
+    "Để sau": "Later",
+    "Đang cập nhật…": "Updating…",
+    "Đang chuẩn bị tải…": "Preparing download…",
+    "Đang tải…": "Downloading…",
+    "Đang tải… {n}%": "Downloading… {n}%",
+    "Đang cài đặt, app sẽ tự khởi động lại…": "Installing, the app will restart by itself…",
+    "Thư mục repo": "Repo folder",
+    "Chưa chọn thư mục": "No folder selected",
+    "Bỏ thư mục này (không lưu lại)": "Clear this folder (not saved)",
+    "Bỏ thư mục repo": "Clear repo folder",
+    "Tự đổi URL remote giữa SSH và HTTPS cho khớp tài khoản": "Automatically switch the remote URL between SSH and HTTPS to match the account",
+    "Đổi remote SSH ⇄ HTTPS": "Switch remote SSH ⇄ HTTPS",
+    "Chọn thư mục…": "Choose folder…",
+    "Chọn thư mục repo": "Choose repo folder",
+    "Chọn file SSH private key": "Choose SSH private key file",
+    "Chọn thư mục repo để xem tài khoản đang dùng.": "Choose a repo folder to see which account is in use.",
+    "Hãy chọn thư mục repo trước.": "Please choose a repo folder first.",
+    "Chỉ repo này dùng tài khoản đã chọn, các repo khác không bị ảnh hưởng.": "Only this repo uses the selected account; other repos are not affected.",
+    "Ghi vào ~/.gitconfig: mọi repo chưa có cấu hình riêng sẽ dùng tài khoản này.": "Writes to ~/.gitconfig: every repo without its own config will use this account.",
+    // ── npm
+    "Registry mặc định": "Default registry",
+    "Scope (tuỳ chọn)": "Scope (optional)",
+    "Token truy cập (npm access token)": "Access token (npm access token)",
+    "Ghi vào ~/.npmrc: mọi dự án chưa có .npmrc riêng sẽ dùng tài khoản này.": "Writes to ~/.npmrc: every project without its own .npmrc will use this account.",
+    "Để trống nếu muốn dùng registry này cho mọi package. Khi bấm “Dùng tài khoản này”, app ghi token vào file <code>.npmrc</code> (toàn máy hoặc trong repo) đúng như npm yêu cầu, nên file này chứa token dạng chữ thường. Không commit <code>.npmrc</code> có token lên git.": "Leave empty to use this registry for every package. When you click “Use this account”, the app writes the token into the <code>.npmrc</code> file (global or in the repo) as npm requires, so that file holds the token in plain text. Never commit an <code>.npmrc</code> that contains a token.",
+    // ── SSH host & tài khoản SSH
+    "Chọn tài khoản SSH để kết nối vào máy chủ ngay": "Pick an SSH account to connect to a server right away",
+    "Không có key (nhập mật khẩu khi kết nối)": "No key (enter the password when connecting)",
+    "Dùng ở menu SSH host": "Used in the SSH host menu",
+    "Kết nối bằng": "Connect with",
+    "Không dùng tài khoản": "No account (plain ssh)",
+    "Chưa có tài khoản SSH. Vào Tài khoản → SSH để thêm.": "No SSH account yet. Go to Accounts → SSH to add one.",
+    "Thêm SSH host": "Add SSH host",
+    "Sửa SSH host": "Edit SSH host",
+    "Chỉ lưu địa chỉ máy chủ. Tài khoản (user, key) chọn lúc kết nối.": "Only the server address is stored. The account (user, key) is chosen when connecting.",
+    "Ví dụ: Server production": "e.g. Production server",
+    "Địa chỉ (IP hoặc domain)": "Address (IP or domain)",
+    "Ghi chú (tuỳ chọn)": "Note (optional)",
+    "Ví dụ: cụm gurucall": "e.g. gurucall cluster",
+    "Username SSH": "SSH username",
+    "Mật khẩu SSH (tuỳ chọn)": "SSH password (optional)",
+    "Nhập mật khẩu của user này": "Enter this user's password",
+    "Bạn có thể dùng mật khẩu, key (RSA, ED25519, ECDSA… mọi loại key OpenSSH) hoặc cả hai. Mật khẩu lưu trong kho bảo mật của hệ điều hành và được tự điền khi kết nối. Không có cả hai thì terminal sẽ hỏi.": "You can use a password, a key (RSA, ED25519, ECDSA… any OpenSSH key) or both. The password is stored in the operating system's secure store and filled in automatically when connecting. With neither, the terminal will ask.",
+    "mật khẩu đã lưu": "password saved",
+    "Không có key / mật khẩu (nhập khi kết nối)": "No key / password (enter when connecting)",
+    "Key + mật khẩu": "Key + password",
+    "Mật khẩu": "Password",
+    "Key SSH (tuỳ chọn)": "SSH key (optional)",
+    "Kết nối": "Connect",
+    "Danh sách": "List",
+    "Kết nối lại": "Reconnect",
+    "Mở kết nối mới": "Open a new connection",
+    "Nhân đôi": "Duplicate",
+    "Mở thêm một tab cùng host và tài khoản này": "Open another tab to this host and account",
+    "{n} phiên đang mở": "{n} open session(s)",
+    "Đóng tab": "Close tab",
+    "Đang kết nối…": "Connecting…",
+    "Phiên SSH đã kết thúc — bấm Kết nối lại hoặc đóng tab": "SSH session ended — click Reconnect or close the tab",
+    "Xoá SSH host “{n}”?": "Delete SSH host “{n}”?",
+    "Tài khoản SSH": "SSH accounts",
+    "Đã lưu": "Saved",
+    // ── hướng dẫn từng menu
+    "Hướng dẫn: tài khoản Git": "Guide: Git accounts",
+    "1. Thêm tài khoản": "1. Add an account",
+    "Bấm thẻ <b>Thêm tài khoản</b> ở cuối danh sách.": "Click the <b>Add account</b> card at the end of the list.",
+    "Nhập tên hiển thị, host (github.com, gitlab.com…), <code>user.name</code> và <code>user.email</code>. Hai giá trị sau cùng sẽ hiện trên các commit của bạn.": "Enter a display name, the host (github.com, gitlab.com…), <code>user.name</code> and <code>user.email</code>. The last two appear on your commits.",
+    "Chọn cách đăng nhập: <b>SSH key</b> (chọn file hoặc dán private key) hoặc <b>Personal Access Token</b> (username + token).": "Choose how to sign in: an <b>SSH key</b> (pick a file or paste the private key) or a <b>Personal Access Token</b> (username + token).",
+    "Bấm <b>Lưu</b>. Lúc này app chỉ ghi nhớ thông tin, chưa đổi gì trong git. Token được cất trong Keychain của hệ điều hành.": "Click <b>Save</b>. At this point the app only remembers the details and changes nothing in git. The token is kept in the operating system's Keychain.",
+    "2. Dùng tài khoản": "2. Use an account",
+    "Chọn phạm vi ở góc trên: <b>Toàn máy</b> (ghi vào <code>~/.gitconfig</code>) hoặc <b>Một repo</b> (chỉ repo bạn chọn).": "Pick the scope at the top: <b>Whole machine</b> (writes to <code>~/.gitconfig</code>) or <b>One repo</b> (only the repo you choose).",
+    "Bấm <b>Dùng tài khoản này</b>. App chạy <code>git config</code> để đặt <code>user.name</code> và <code>user.email</code>. Tài khoản SSH còn đặt <code>core.sshCommand</code> trỏ tới đúng key, tài khoản token thì nạp token vào credential helper.": "Click <b>Use this account</b>. The app runs <code>git config</code> to set <code>user.name</code> and <code>user.email</code>. SSH accounts also set <code>core.sshCommand</code> to point at the right key; token accounts load the token into the credential helper.",
+    "Từ đó <code>git commit</code>, <code>git push</code>, <code>git pull</code> ở nơi đó dùng đúng tài khoản, không phải đăng nhập lại.": "From then on <code>git commit</code>, <code>git push</code> and <code>git pull</code> there use that account, with no new sign-in.",
+    "Thẻ có chấm xanh <b>Đang dùng</b> nghĩa là cấu hình git hiện tại đang khớp với tài khoản đó.": "A card with the green <b>In use</b> dot means the current git configuration matches that account.",
+    "3. Mẹo": "3. Tips",
+    "Bấm biểu tượng nhịp tim để <b>Test kết nối</b>: SSH thử đăng nhập vào host, token gọi API để xem token thuộc tài khoản nào.": "Click the heartbeat icon to <b>Test the connection</b>: SSH tries to sign in to the host, a token calls the API to see which account it belongs to.",
+    "Lấy token: GitHub vào Settings → Developer settings → Personal access tokens (cần quyền <code>repo</code>); GitLab vào Preferences → Access tokens; Bitbucket dùng app password.": "Getting a token: on GitHub go to Settings → Developer settings → Personal access tokens (needs the <code>repo</code> scope); on GitLab go to Preferences → Access tokens; Bitbucket uses an app password.",
+    "Xoá tài khoản trong app cũng xoá token hoặc key đã lưu của tài khoản đó.": "Deleting an account in the app also deletes its saved token or key.",
+    "Hướng dẫn: npm registry": "Guide: npm registry",
+    "Bấm thẻ <b>Thêm tài khoản</b>, nhập tên hiển thị, <b>Registry</b> (npmjs, GitHub Packages hoặc registry riêng của công ty) và token.": "Click the <b>Add account</b> card, then enter a display name, the <b>Registry</b> (npmjs, GitHub Packages or your company's private registry) and a token.",
+    "Chỉ muốn dùng registry này cho một nhóm package thì điền <b>Scope</b> (ví dụ <code>@congty</code>). Để trống thì áp dụng cho mọi package.": "To use this registry only for one group of packages, fill in the <b>Scope</b> (for example <code>@company</code>). Leave it empty to apply to every package.",
+    "Tạo token trên trang của registry: npmjs vào Access Tokens; GitHub Packages dùng Personal access token có quyền <code>read:packages</code>.": "Create the token on the registry's site: on npmjs use Access Tokens; GitHub Packages uses a Personal access token with the <code>read:packages</code> scope.",
+    "Chọn phạm vi: <b>Toàn máy</b> ghi vào <code>~/.npmrc</code>, <b>Một repo</b> ghi vào <code>.npmrc</code> trong repo đó.": "Pick the scope: <b>Whole machine</b> writes to <code>~/.npmrc</code>, <b>One repo</b> writes to the <code>.npmrc</code> inside that repo.",
+    "Bấm <b>Dùng tài khoản này</b>: app ghi dòng <code>//registry/:_authToken=…</code> và dòng <code>registry=</code> (hoặc <code>@scope:registry=</code>), các dòng khác giữ nguyên.": "Click <b>Use this account</b>: the app writes the <code>//registry/:_authToken=…</code> line and a <code>registry=</code> line (or <code>@scope:registry=</code>), leaving the other lines untouched.",
+    "Sau đó <code>npm install</code> và <code>npm publish</code> dùng đúng tài khoản. Kiểm tra bằng <code>npm whoami</code>.": "After that <code>npm install</code> and <code>npm publish</code> use that account. Check with <code>npm whoami</code>.",
+    "Token nằm dạng chữ thường trong <code>.npmrc</code> (npm yêu cầu như vậy). Đừng commit file này lên git.": "The token sits in plain text in <code>.npmrc</code> (npm requires this). Never commit that file to git.",
+    "Bấm biểu tượng nhịp tim để <b>Test kết nối</b> (gọi <code>/-/whoami</code> của registry).": "Click the heartbeat icon to <b>Test the connection</b> (calls the registry's <code>/-/whoami</code>).",
+    "Hướng dẫn: tài khoản SSH": "Guide: SSH accounts",
+    "1. Tài khoản SSH là gì": "1. What is an SSH account",
+    "Là thông tin để đăng nhập vào server: <b>username</b>, cùng <b>mật khẩu</b>, <b>key</b> (RSA, ED25519…) hoặc cả hai.": "It is the details used to sign in to a server: a <b>username</b>, plus a <b>password</b>, a <b>key</b> (RSA, ED25519…) or both.",
+    "Tài khoản này không đổi cấu hình git hay npm. Nó được dùng ở menu <b>SSH host</b>.": "This account does not change your git or npm configuration. It is used in the <b>SSH host</b> menu.",
+    "2. Thêm tài khoản": "2. Add an account",
+    "Bấm thẻ <b>Thêm tài khoản</b>, nhập tên hiển thị và username (ví dụ <code>root</code>, <code>ubuntu</code>).": "Click the <b>Add account</b> card and enter a display name and username (for example <code>root</code>, <code>ubuntu</code>).",
+    "Nhập mật khẩu, chọn hoặc dán key, hoặc cả hai. Mật khẩu lưu trong Keychain và được tự điền khi kết nối.": "Enter a password, pick or paste a key, or both. The password is stored in the Keychain and filled in automatically when connecting.",
+    "Để trống cả hai thì terminal sẽ hỏi mật khẩu khi bạn kết nối.": "If you leave both empty, the terminal asks for the password when you connect.",
+    "3. Bước tiếp theo": "3. Next step",
+    "Sang menu <b>SSH host</b>, thêm máy chủ rồi chọn tài khoản này ở ô <b>Kết nối bằng</b>.": "Go to the <b>SSH host</b> menu, add a server, then pick this account in the <b>Connect with</b> box.",
+    "Hướng dẫn: SSH host": "Guide: SSH hosts",
+    "1. Thêm máy chủ": "1. Add a server",
+    "Bấm thẻ <b>Thêm SSH host</b>, nhập tên hiển thị, địa chỉ (IP hoặc domain) và port (mặc định 22).": "Click the <b>Add SSH host</b> card and enter a display name, the address (IP or domain) and the port (22 by default).",
+    "Host chỉ lưu địa chỉ. User, mật khẩu và key nằm ở tài khoản SSH (menu <b>Tài khoản → SSH</b>).": "A host only stores the address. The user, password and key live in an SSH account (menu <b>Accounts → SSH</b>).",
+    "2. Kết nối": "2. Connect",
+    "Chọn tài khoản ở ô <b>Kết nối bằng</b>, rồi bấm <b>Kết nối</b>. Một tab terminal mở ngay trong app và chạy <code>ssh</code>.": "Pick an account in <b>Connect with</b>, then click <b>Connect</b>. A terminal tab opens right inside the app and runs <code>ssh</code>.",
+    "Mở thêm tab bằng nút <b>+</b> (chọn host khác) hoặc <b>Nhân đôi</b> (cùng host). Chuyển tab qua lại không mất phiên.": "Open more tabs with the <b>+</b> button (another host) or <b>Duplicate</b> (same host). Switching between tabs keeps every session.",
+    "Phiên kết thúc thì bấm <b>Kết nối lại</b>. Đóng tab hoặc tắt app sẽ đóng phiên ssh.": "When a session ends, click <b>Reconnect</b>. Closing a tab or quitting the app closes the ssh session.",
+    "Lần đầu tới một host mới, app tự chấp nhận khoá host của server.": "The first time you reach a new host, the app automatically accepts the server's host key.",
+    "Chạy việc lâu trên server nên dùng <code>tmux</code> hoặc <code>screen</code> để không bị mất khi đóng phiên.": "For long-running work on a server, use <code>tmux</code> or <code>screen</code> so it is not lost when the session closes.",
+    "Ẩn / hiện hướng dẫn": "Hide / show the guide",
+    // ── quản lý file
+    "Thu nhỏ": "Minimize",
+    "Phóng to": "Maximize",
+    "Tạo key mới (ed25519)": "Generate new key (ed25519)",
+    "Xem public key": "Show public key",
+    "Public key (dán vào GitHub/GitLab, không phải bí mật)": "Public key (paste it into GitHub/GitLab; it is not a secret)",
+    "Sao chép public key": "Copy public key",
+    "Mở trang thêm key…": "Open the add-key page…",
+    "Form này đã có key. Tạo key mới sẽ thay key đó khi bạn bấm Lưu. Tiếp tục?": "This form already has a key. Generating a new one replaces it when you click Save. Continue?",
+    "Tạo key mới": "Generate new key",
+    "Đã tạo key. Hãy thêm public key vào GitHub/GitLab, rồi bấm Lưu.": "Key generated. Add the public key to GitHub/GitLab, then click Save.",
+    "Đã sao chép public key": "Public key copied",
+    "Quy tắc theo thư mục": "Folder rules",
+    "Gán một thư mục cho một tài khoản. Mọi repo nằm trong thư mục đó tự dùng đúng tài khoản, không cần bấm “Dùng tài khoản này”.": "Assign a folder to an account. Every repo inside that folder automatically uses the right account, with no need to click “Use this account”.",
+    "Thêm quy tắc": "Add rule",
+    "Thêm quy tắc theo thư mục": "Add a folder rule",
+    "Repo nằm trong thư mục này (kể cả thư mục con) sẽ tự dùng tài khoản bạn chọn.": "Repos inside this folder (including subfolders) will automatically use the account you choose.",
+    "Thư mục": "Folder",
+    "Chưa chọn thư mục": "No folder selected",
+    "Chọn thư mục…": "Choose folder…",
+    "Tài khoản": "Account",
+    "Lưu quy tắc": "Save rule",
+    "Đang có hiệu lực": "Active",
+    "Chưa ghi vào ~/.gitconfig": "Not written to ~/.gitconfig yet",
+    "Chưa có quy tắc nào.": "No rules yet.",
+    "Chưa có tài khoản Git nào. Hãy thêm tài khoản trước.": "No Git accounts yet. Add an account first.",
+    "Chọn thư mục chứa các repo": "Choose the folder that contains your repos",
+    "Hãy chọn thư mục.": "Please choose a folder.",
+    "Hãy chọn tài khoản.": "Please choose an account.",
+    "Đã lưu quy tắc": "Rule saved",
+    "Đã xoá quy tắc": "Rule deleted",
+    "Hiệu năng": "Performance",
+    "RAM, CPU và tài nguyên mà app đang dùng": "RAM, CPU and resources the app is using",
+    "RAM của app theo thời gian": "App RAM over time",
+    "RAM tổng của app": "Total app RAM",
+    "{p}% RAM máy": "{p}% of system RAM",
+    "RAM tiến trình chính": "Main process RAM",
+    "RAM tiến trình con": "Child process RAM",
+    "{n} tiến trình (ssh, …)": "{n} process(es) (ssh, …)",
+    "CPU": "CPU",
+    "trên tổng {n} nhân": "across {n} cores",
+    "Phiên SSH đang mở": "Open SSH sessions",
+    "Đã chạy": "Uptime",
+    "Dữ liệu app lưu": "App data on disk",
+    "hồ sơ, host (secret nằm trong Keychain)": "profiles, hosts (secrets live in the Keychain)",
+    "Hệ thống": "System",
+    "Chưa tính bộ máy webview của hệ điều hành trên macOS, nên con số thực tế có thể cao hơn một chút.": "On macOS the system webview's own processes are not counted, so the real figure can be a bit higher.",
+    "Tiến trình con": "Child processes",
+    "Đang xử lý…": "Working…",
+    "Tải về (nén .tar.gz)": "Download (as .tar.gz)",
+    "Đổi tên": "Rename",
+    "Không có mục nào khớp": "No matching items",
+    "Đã tải lên {n} mục": "Uploaded {n} item(s)",
+    "Xoá thư mục “{n}” và toàn bộ nội dung bên trong trên server?": "Delete the folder “{n}” and everything inside it on the server?",
+    "Đang xoá…": "Deleting…",
+    "Đang đổi tên…": "Renaming…",
+    "Đang tạo…": "Creating…",
+    "Tải thư mục lên": "Upload folder",
+    "Lọc theo tên…": "Filter by name…",
+    "Hiện file ẩn": "Show hidden files",
+    "Kéo thả file hoặc thư mục từ máy vào đây để tải lên thư mục đang mở.": "Drag and drop files or folders from your computer here to upload them into the open folder.",
+    "Mở": "Open",
+    "Đóng": "Close",
+    "Tệp trên server": "Files on the server",
+    "Duyệt thư mục, tải file lên hoặc tải về qua SSH, dùng đúng tài khoản đã chọn ở thẻ host.": "Browse folders, upload or download files over SSH, using the account chosen on the host card.",
+    "Thư mục cha": "Parent folder",
+    "Thư mục mới": "New folder",
+    "Tải file lên": "Upload files",
+    "Quản lý file (SFTP)": "File manager (SFTP)",
+    "Thư mục trống": "Empty folder",
+    "Tải về": "Download",
+    "Tệp trên {n}": "Files on {n}",
+    "Đang tải về…": "Downloading…",
+    "Đã tải về": "Downloaded",
+    "Xoá “{n}” trên server?": "Delete “{n}” on the server?",
+    "Đang tải lên…": "Uploading…",
+    "Đã tải lên": "Uploaded",
+    "Tên thư mục mới, nhấn Enter": "New folder name, press Enter",
+    "Không mở được file": "Could not open the file",
+    "Không tạo được file": "Could not create the file",
+    "Lệnh trên server thất bại": "The command on the server failed",
+    // ── thẻ tài khoản
+    "Đang hoạt động": "Active",
+    "Tài khoản khác": "Other accounts",
+    "Đang dùng": "In use",
+    "Đang chuyển…": "Switching…",
+    "Áp dụng lại": "Apply again",
+    "Dùng tài khoản này": "Use this account",
+    "Test kết nối": "Test connection",
+    "Sửa": "Edit",
+    "Xoá": "Delete",
+    "Chưa có tài khoản {p} nào đang hoạt động. Chọn một tài khoản bên dưới để dùng.": "No {p} account is active. Pick one below to use.",
+    "Git đang dùng {n} <{e}> — không khớp tài khoản nào đã lưu.": "Git is using {n} <{e}> — it does not match any saved account.",
+    "(chưa đặt tên)": "(no name set)",
+    "chưa đặt email": "no email set",
+    "Chưa cấu hình user.name / user.email. Chọn một tài khoản bên dưới để bắt đầu.": "user.name / user.email is not configured. Pick an account below to get started.",
+    // ── nhật ký & thông báo
+    "Nhật ký thao tác": "Activity log",
+    "Xoá nhật ký": "Clear log",
+    "Chưa có thao tác nào.": "No activity yet.",
+    "▶ Chuyển sang “{n}”": "▶ Switching to “{n}”",
+    "Đã chuyển sang “{n}”": "Switched to “{n}”",
+    "✗ Lỗi khi chuyển sang “{n}”: {e}": "✗ Error while switching to “{n}”: {e}",
+    "Test “{n}”: {m}": "Test “{n}”: {m}",
+    "✗ Test “{n}” lỗi: {e}": "✗ Test “{n}” failed: {e}",
+    "Xoá tài khoản “{n}”? Token/key đã lưu cho tài khoản này cũng bị xoá.": "Delete account “{n}”? The saved token/key for this account will be deleted too.",
+    "Xoá tài khoản “{n}”?": "Delete account “{n}”?",
+    "Xác nhận xoá": "Confirm deletion",
+    "Đã xoá tài khoản “{n}”": "Deleted account “{n}”",
+    "Đã xoá": "Deleted",
+    "Đã lưu tài khoản “{n}” ({a})": "Saved account “{n}” ({a})",
+    "Đã lưu tài khoản": "Account saved",
+    "Đã sao chép key": "Key copied",
+    "Đã sao chép giấy phép": "License copied",
+    "Không sao chép được, hãy bôi đen và copy thủ công.": "Could not copy; please select the text and copy it manually.",
+    "(Không đọc được nội dung LICENSE)": "(Could not read the LICENSE content)",
+    // ── cập nhật
+    "Có bản mới {v}": "New version {v} available",
+    "Bạn đang dùng v{v}": "You are on v{v}",
+    "Phiên bản {v}": "Version {v}",
+    "Đang kiểm tra…": "Checking…",
+    "Chưa có bản phát hành nào trên GitHub.": "No release has been published on GitHub yet.",
+    "Có bản mới {l} (bạn đang dùng v{c}).": "New version {l} available (you are on v{c}).",
+    "Bạn đang dùng bản mới nhất (v{c}).": "You are on the latest version (v{c}).",
+    "Kiểm tra cập nhật: {m}": "Update check: {m}",
+    "✗ Kiểm tra cập nhật lỗi: {e}": "✗ Update check failed: {e}",
+    "▶ Bắt đầu cập nhật app": "▶ Starting app update",
+    "✗ Cập nhật lỗi: {e}": "✗ Update failed: {e}",
+    // ── form
+    "Bạn tự nhập một lần, sau đó chỉ cần bấm chọn để đổi.": "Enter it once, then just click to switch.",
+    "Tên hiển thị": "Display name",
+    "Ví dụ: Công ty": "e.g. Work",
+    "user.name (tên trên commit)": "user.name (name on commits)",
+    "Cách đăng nhập": "Sign-in method",
+    "File SSH key (private key)": "SSH key file (private key)",
+    "Chọn file…": "Choose file…",
+    "Hoặc dán nội dung private key": "Or paste the private key content",
+    "Nếu dán key, app lưu thành file riêng (quyền 600) trong thư mục dữ liệu của app. Key có passphrase cần nạp vào ssh-agent trước.": "If you paste a key, the app saves it as its own file (permission 600) in the app data folder. Keys with a passphrase must be loaded into ssh-agent first.",
+    "Username đăng nhập": "Login username",
+    "Tên tài khoản trên GitHub/GitLab": "Account name on GitHub/GitLab",
+    "Token được lưu trong kho bảo mật của hệ điều hành (Keychain / Credential Manager / Secret Service), không ghi vào file thường.": "The token is stored in the operating system's secure store (Keychain / Credential Manager / Secret Service), not in a regular file.",
+    "Đã lưu — để trống nếu giữ nguyên": "Saved — leave empty to keep it",
+    "Hiện": "Show",
+    "Ẩn": "Hide",
+    "Xem key đã lưu": "View saved key",
+    "Ẩn key": "Hide key",
+    "Sao chép": "Copy",
+    "Huỷ": "Cancel",
+    "Lưu": "Save",
+    // ── cài đặt
+    "Phiên bản": "Version",
+    "Kiểm tra cập nhật": "Check for updates",
+    "Tự kiểm tra bản mới khi mở app": "Automatically check for updates when the app opens",
+    "Ngôn ngữ": "Language",
+    "Chọn ngôn ngữ hiển thị của app": "Choose the app display language",
+    "Dữ liệu của bạn ở lại trên máy": "Your data stays on your machine",
+    "Khi kiểm tra cập nhật, app chỉ gửi <b>một yêu cầu đọc (GET)</b> tới <code>api.github.com/repos/namntdev03/manager-account/releases/latest</code>.": "When checking for updates, the app only sends <b>one read request (GET)</b> to <code>api.github.com/repos/namntdev03/manager-account/releases/latest</code>.",
+    "Khi bạn bấm <b>Cập nhật ngay</b>, app tải file cập nhật từ <b>GitHub Releases của dự án</b> và kiểm tra chữ ký số trước khi cài. Không có dữ liệu nào của bạn được gửi đi.": "When you click <b>Update now</b>, the app downloads the update from the <b>project's GitHub Releases</b> and verifies the digital signature before installing. None of your data is sent.",
+    "App <b>không gửi</b> tên, email, token, SSH key, danh sách tài khoản, đường dẫn repo hay bất kỳ dữ liệu nào của bạn.": "The app <b>never sends</b> your name, email, token, SSH key, account list, repo path or any other data of yours.",
+    "GitHub chỉ thấy địa chỉ IP và yêu cầu như mọi lượt truy cập web thông thường. Bạn có thể tắt tự kiểm tra ở trên.": "GitHub only sees your IP address and the request, like any ordinary web visit. You can turn off automatic checking above.",
+    "Tài khoản, token và cấu hình chỉ nằm trên máy này (token trong kho bảo mật của hệ điều hành).": "Accounts, tokens and settings live only on this machine (tokens in the operating system's secure store).",
+    // ── giới thiệu
+    "Đổi nhanh giữa nhiều tài khoản Git chỉ với một cú bấm. Chạy trên macOS, Windows và Linux.": "Switch between multiple Git accounts with a single click. Runs on macOS, Windows and Linux.",
+    "Trang dự án trên GitHub": "Project page on GitHub",
+    "App này làm gì?": "What does this app do?",
+    "Nếu bạn dùng nhiều tài khoản GitHub, GitLab hay Bitbucket (cá nhân, công ty…), mỗi lần đổi qua lại thường phải sửa tên, email và đăng nhập lại thủ công. App gom tất cả vào một chỗ.": "If you use several GitHub, GitLab or Bitbucket accounts (personal, work…), switching usually means editing your name and email and signing in again by hand. This app puts it all in one place.",
+    "<b>Lưu nhiều tài khoản.</b> Mỗi tài khoản gồm <code>user.name</code>, <code>user.email</code> và cách đăng nhập: SSH key hoặc Personal Access Token.": "<b>Store many accounts.</b> Each account has a <code>user.name</code>, a <code>user.email</code> and a sign-in method: SSH key or Personal Access Token.",
+    "<b>Đổi tài khoản một cú bấm,</b> áp dụng cho toàn máy hoặc chỉ cho một repo. Tuỳ chọn tự đổi remote giữa SSH và HTTPS cho khớp.": "<b>Switch accounts with one click,</b> for the whole machine or just one repo. Optionally switch the remote between SSH and HTTPS to match.",
+    "<b>Biết tài khoản nào đang hoạt động</b> trên từng nền tảng, lọc theo GitHub / GitLab / Bitbucket hoặc host khác.": "<b>See which account is active</b> on each platform, and filter by GitHub / GitLab / Bitbucket or other hosts.",
+    "<b>Test kết nối</b> để chắc key hoặc token đang đăng nhập đúng tài khoản.": "<b>Test the connection</b> to make sure the key or token signs in as the right account.",
+    "App thay đổi gì trong git của bạn?": "What does the app change in your git config?",
+    "App chỉ chạy lệnh <code>git config</code> bình thường và ghi các khoá sau, bạn có thể tự kiểm tra bất cứ lúc nào:": "The app only runs ordinary <code>git config</code> commands and writes the keys below, which you can inspect at any time:",
+    "<code>user.name</code>, <code>user.email</code>: danh tính trên commit.": "<code>user.name</code>, <code>user.email</code>: the identity on commits.",
+    "<code>core.sshCommand</code>: trỏ tới đúng SSH key (tài khoản dùng SSH).": "<code>core.sshCommand</code>: points to the right SSH key (SSH accounts).",
+    "<code>credential.https://&lt;host&gt;.username</code> và nạp token vào <code>git credential</code> của hệ điều hành (tài khoản dùng token).": "<code>credential.https://&lt;host&gt;.username</code> plus loading the token into the operating system's <code>git credential</code> store (token accounts).",
+    "<code>remote.&lt;tên&gt;.url</code>: chỉ khi bạn tick “Đổi remote SSH ⇄ HTTPS”.": "<code>remote.&lt;name&gt;.url</code>: only when you tick “Switch remote SSH ⇄ HTTPS”.",
+    "Chính sách dữ liệu &amp; quyền riêng tư": "Data policy &amp; privacy",
+    "<b>Dữ liệu chỉ nằm trên máy bạn.</b> Không có server của app, không tài khoản người dùng, không thống kê, không quảng cáo, không bán hay chia sẻ dữ liệu cho bên thứ ba.": "<b>Your data stays on your machine.</b> There is no app server, no user accounts, no analytics, no ads, and no selling or sharing of data with third parties.",
+    "<b>Nơi lưu:</b> thông tin tài khoản (tên, email, host, đường dẫn key) trong thư mục dữ liệu của app; <b>token trong kho bảo mật của hệ điều hành</b> (Keychain / Credential Manager / Secret Service), không ghi vào file thường; private key dán vào app lưu thành file riêng quyền 600.": "<b>Where it is stored:</b> account details (name, email, host, key path) in the app's data folder; <b>tokens in the operating system's secure store</b> (Keychain / Credential Manager / Secret Service), never in a regular file; a private key pasted into the app is saved as its own file with permission 600.",
+    "<b>Khi nào app dùng mạng:</b> (1) kiểm tra bản cập nhật, chỉ một yêu cầu đọc tới GitHub Releases của dự án, tắt được ở <i>Cài đặt</i>; (2) khi bạn bấm <i>Cập nhật ngay</i>, tải file cập nhật từ GitHub Releases của dự án; (3) khi bạn bấm <i>Test kết nối</i>, chỉ tới đúng nền tảng của tài khoản đó.": "<b>When the app uses the network:</b> (1) checking for updates, a single read request to the project's GitHub Releases, which you can turn off in <i>Settings</i>; (2) when you click <i>Update now</i>, downloading the update from the project's GitHub Releases; (3) when you click <i>Test connection</i>, only to that account's own platform.",
+    "<b>Không bao giờ gửi</b> tên, email, token, SSH key, danh sách tài khoản hay đường dẫn repo của bạn tới bất kỳ đâu.": "<b>Never sends</b> your name, email, token, SSH key, account list or repo path anywhere.",
+    "<b>Cập nhật:</b> app báo khi có bản mới; chỉ khi bạn bấm <i>Cập nhật ngay</i> app mới tải về. File cập nhật được kiểm tra chữ ký số (minisign) trước khi cài, file giả hoặc bị sửa sẽ bị từ chối.": "<b>Updates:</b> the app tells you when a new version exists and only downloads it when you click <i>Update now</i>. The update file's digital signature (minisign) is verified before installing; forged or tampered files are rejected.",
+    "<b>Xoá dữ liệu:</b> xoá tài khoản trong app sẽ xoá token và key tương ứng. Muốn gỡ sạch, xoá thư mục dữ liệu của app (macOS: <code>~/Library/Application Support/com.nguyenthanhnam.manageraccount</code>; Windows: <code>%APPDATA%\\com.nguyenthanhnam.manageraccount</code>; Linux: <code>~/.local/share/com.nguyenthanhnam.manageraccount</code>) và mục <code>manager-account</code> trong Keychain / Credential Manager.": "<b>Deleting data:</b> deleting an account in the app also deletes its token and key. To remove everything, delete the app's data folder (macOS: <code>~/Library/Application Support/com.nguyenthanhnam.manageraccount</code>; Windows: <code>%APPDATA%\\com.nguyenthanhnam.manageraccount</code>; Linux: <code>~/.local/share/com.nguyenthanhnam.manageraccount</code>) and the <code>manager-account</code> entry in Keychain / Credential Manager.",
+    "Giấy phép": "License",
+  };
+
+  // Thông báo từ phần Rust (backend) — thay theo cụm, dài trước ngắn sau.
+  const BACKEND = [
+    ["Không đọc được public key (key có passphrase hoặc sai định dạng)", "Could not read the public key (the key has a passphrase or a wrong format)"],
+    ["Chưa có key nào để lấy public key", "There is no key to read a public key from"],
+    ["ssh-keygen thất bại", "ssh-keygen failed"],
+    ["Quy tắc theo thư mục chỉ dùng cho tài khoản Git (GitHub, GitLab, Bitbucket…)", "Folder rules only work with Git accounts (GitHub, GitLab, Bitbucket…)"],
+    ["Chưa chọn thư mục", "No folder selected"],
+    ["Không thấy thư mục", "Folder not found"],
+    ["Không chạy được `tar`", "Could not run `tar`"],
+    ["Không đọc được dữ liệu từ tar", "Could not read data from tar"],
+    ["Lệnh trên server thất bại", "The command on the server failed"],
+    ["Không mở được file", "Could not open the file"],
+    ["Không tạo được file", "Could not create the file"],
+    ["Đường dẫn file không hợp lệ", "Invalid file path"],
+    ["Không tìm thấy lệnh", "Command not found:"],
+    ["Hãy cài đặt rồi thử lại.", "Please install it and try again."],
+    ["Không chạy được", "Could not run"],
+    ["File profiles.json bị lỗi", "profiles.json is corrupted"],
+    ["Không tìm thấy tài khoản này", "Account not found"],
+    ["Không tìm thấy tài khoản", "Account not found"],
+    ["Chưa chọn thư mục repo", "No repo folder selected"],
+    ["Thư mục này không phải git repo", "This folder is not a git repo"],
+    ["Phạm vi không hợp lệ", "Invalid scope"],
+    ["Máy chưa có credential.helper -> đặt global =", "No credential.helper found -> set global ="],
+    ["Cần nhập đủ: tên hiển thị, host, user.name, user.email", "Please fill in: display name, host, user.name, user.email"],
+    ["Hãy chọn file SSH key hoặc dán private key", "Choose an SSH key file or paste a private key"],
+    ["Không thấy file key", "Key file not found"],
+    ["Cần nhập username đăng nhập (chế độ token)", "Login username is required (token mode)"],
+    ["Không lưu được token vào keychain", "Could not save the token to the keychain"],
+    ["Kiểu đăng nhập không hợp lệ", "Invalid sign-in method"],
+    ["Chưa có token nào được lưu cho tài khoản này", "No token is saved for this account"],
+    ["Không đọc được file key", "Could not read the key file"],
+    ["toàn máy", "global"],
+    ["token nạp vào credential helper", "token loaded into credential helper"],
+    ["Tài khoản này chưa có SSH key", "This account has no SSH key"],
+    ["Không đọc được token từ keychain", "Could not read the token from the keychain"],
+    ["(không có phản hồi)", "(no response)"],
+    ["Chưa hỗ trợ test token cho host này (chỉ GitHub/GitLab).", "Token testing is not supported for this host (GitHub/GitLab only)."],
+    ["Token hợp lệ - đăng nhập là", "Token is valid - signed in as"],
+    ["Token sai hoặc đã hết hạn (HTTP 401).", "Token is wrong or expired (HTTP 401)."],
+    ["Phản hồi bất thường", "Unexpected response"],
+    ["Không kết nối được tới GitHub", "Could not connect to GitHub"],
+    ["GitHub trả về dữ liệu không đọc được.", "GitHub returned data that could not be read."],
+    ["GitHub tạm giới hạn số lần kiểm tra, hãy thử lại sau ít phút.", "GitHub is temporarily rate-limiting checks; please try again in a few minutes."],
+    ["GitHub phản hồi bất thường", "GitHub responded unexpectedly"],
+    ["Chưa thiết lập khoá ký cập nhật. Xem README, mục “Thiết lập cập nhật tự động”.", "The update signing key is not set up. See the README, section “Set up automatic updates”."],
+    ["Chưa cấu hình cập nhật tự động", "Automatic updates are not configured"],
+    ["Không kiểm tra được bản mới", "Could not check for a new version"],
+    ["Bạn đang dùng bản mới nhất.", "You are on the latest version."],
+    ["Cập nhật thất bại", "Update failed"],
+    ["Địa chỉ không hợp lệ.", "Invalid address."],
+    ["Cần nhập đủ: tên hiển thị và registry", "Please fill in: display name and registry"],
+    ["Cần nhập token (npm access token)", "An npm access token is required"],
+    ["Registry này không hỗ trợ kiểm tra token (không có /-/whoami).", "This registry does not support token checks (no /-/whoami)."],
+    ["token ghi vào", "token written to"],
+    ["Không ghi được", "Could not write"],
+    ["Cần nhập tên hiển thị", "Display name is required"],
+    ["Username SSH không hợp lệ (chỉ gồm chữ, số, . _ -)", "Invalid SSH username (letters, digits, . _ - only)"],
+    ["Cần nhập đủ: tên hiển thị và địa chỉ (IP hoặc domain)", "Please fill in: display name and address (IP or domain)"],
+    ["Địa chỉ không hợp lệ (chỉ gồm chữ, số, . - : _)", "Invalid address (letters, digits, . - : _ only)"],
+    ["Port không hợp lệ", "Invalid port"],
+    ["Không tìm thấy SSH host này", "SSH host not found"],
+    ["Không mở được Terminal", "Could not open Terminal"],
+    ["Không mở được cửa sổ terminal", "Could not open a terminal window"],
+    ["Không tìm thấy ứng dụng terminal nào để mở (đã thử gnome-terminal, konsole, xfce4-terminal, xterm…).", "No terminal application found to open (tried gnome-terminal, konsole, xfce4-terminal, xterm…)."],
+    ["Tài khoản SSH được dùng ở menu SSH host: chọn host rồi bấm tài khoản để kết nối.", "SSH accounts are used in the SSH host menu: pick a host, then click an account to connect."],
+    ["Tài khoản SSH được thử bằng cách kết nối tới một SSH host.", "SSH accounts are tested by connecting to an SSH host."],
+    ["File hosts.json bị lỗi", "hosts.json is corrupted"],
+    ["Không lưu được mật khẩu vào keychain", "Could not save the password to the keychain"],
+    ["Chưa có mật khẩu nào được lưu cho tài khoản này", "No password is saved for this account"],
+    ["Không tạo được terminal", "Could not create the terminal"],
+    ["Không đọc được terminal", "Could not read from the terminal"],
+    ["Không ghi được vào terminal", "Could not write to the terminal"],
+    ["Hãy cài OpenSSH rồi thử lại.", "Please install OpenSSH and try again."],
+    ["Lỗi nội bộ (khoá phiên)", "Internal error (session lock)"],
+    ["Lỗi keychain", "Keychain error"],
+  ];
+
+  const LANGS = { vi: null, en: EN };
+  let lang = "vi";
+  const origHtml = new WeakMap();
+  const origAttr = new WeakMap();
+  const origText = new WeakMap();
+  const ATTRS = ["title", "placeholder", "aria-label"];
+
+  function fmt(s, p) {
+    return p ? s.replace(/\{(\w+)\}/g, (m, k) => (k in p ? p[k] : m)) : s;
+  }
+  function t(vi, p) {
+    const tbl = LANGS[lang];
+    return fmt((tbl && tbl[vi]) || vi, p);
+  }
+  // dịch thông báo lỗi/kết quả đến từ backend
+  function tr(msg) {
+    let s = String(msg ?? "");
+    if (lang === "vi") return s;
+    BACKEND.forEach(([vi, en]) => { s = s.split(vi).join(en); });
+    return s;
+  }
+
+  // Dịch phần HTML tĩnh: ghi nhớ nội dung gốc (tiếng Việt) rồi thay theo ngôn ngữ.
+  function applyDom() {
+    const tbl = LANGS[lang];
+    document.documentElement.lang = lang;
+    document.querySelectorAll("body *").forEach((el) => {
+      if (!el.isConnected) return;
+      if (!origHtml.has(el)) {
+        const h = el.innerHTML.trim();
+        origHtml.set(el, h in EN ? h : null);
+      }
+      const vi = origHtml.get(el);
+      if (vi) el.innerHTML = tbl && tbl[vi] ? tbl[vi] : vi;
+      // văn bản nằm trực tiếp trong phần tử (ví dụ nhãn <label>Tên<input/></label>)
+      el.childNodes.forEach((n) => {
+        if (n.nodeType !== 3) return;
+        if (!origText.has(n)) {
+          const k = n.data.trim();
+          origText.set(n, k in EN ? k : null);
+        }
+        const vi = origText.get(n);
+        if (!vi) return;
+        const lead = n.data.match(/^\s*/)[0];
+        const trail = n.data.match(/\s*$/)[0];
+        n.data = lead + (tbl && tbl[vi] ? tbl[vi] : vi) + trail;
+      });
+      let a = origAttr.get(el);
+      if (!a) {
+        a = {};
+        ATTRS.forEach((n) => { const v = el.getAttribute(n); if (v && v in EN) a[n] = v; });
+        origAttr.set(el, a);
+      }
+      Object.keys(a).forEach((n) => el.setAttribute(n, tbl && tbl[a[n]] ? tbl[a[n]] : a[n]));
+    });
+  }
+  function setLang(l) {
+    lang = LANGS[l] !== undefined ? l : "vi";
+    try { localStorage.setItem("lang", lang); } catch { /* bỏ qua */ }
+    applyDom();
+  }
+  function initLang() {
+    let l = null;
+    try { l = localStorage.getItem("lang"); } catch { /* bỏ qua */ }
+    if (!l) l = (navigator.language || "vi").toLowerCase().startsWith("vi") ? "vi" : "en";
+    setLang(l);
+  }
+
+  window.I18N = { t, tr, setLang, initLang, get lang() { return lang; } };
+})();

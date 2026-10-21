@@ -17,6 +17,11 @@ tauri-plugin-dialog = "2"
 tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Terminal SSH tích hợp trong app (PTY chạy trên cả macOS, Windows, Linux)
+portable-pty = "0.8"
+base64 = "0.22"
+# Đo RAM/CPU của chính app (trang Hiệu năng)
+sysinfo = "0.30"
 
 # Kho bảo mật của từng hệ điều hành (lưu token)
 [target.'cfg(target_os = "macos")'.dependencies]
