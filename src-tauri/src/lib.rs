@@ -752,6 +752,67 @@ async fn check_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
     }
 }
 
+#[derive(Clone, Serialize)]
+struct UpdateProgress {
+    phase: String,
+    downloaded: u64,
+    total: u64,
+}
+
+/// Tải bản mới từ GitHub Releases, kiểm tra chữ ký số, cài đặt rồi khởi động lại app.
+#[tauri::command]
+async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Emitter;
+    use tauri_plugin_updater::UpdaterExt;
+
+    // Chưa có khoá công khai (chưa chạy `pnpm set:pubkey`) thì không thể kiểm tra chữ ký -> không cài
+    let pubkey_ok = app
+        .config()
+        .plugins
+        .0
+        .get("updater")
+        .and_then(|v| v.get("pubkey"))
+        .and_then(|p| p.as_str())
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
+    if !pubkey_ok {
+        return Err("Chưa thiết lập khoá ký cập nhật. Xem README, mục “Thiết lập cập nhật tự động”.".into());
+    }
+
+    let updater = app
+        .updater()
+        .map_err(|e| format!("Chưa cấu hình cập nhật tự động: {e}"))?;
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| format!("Không kiểm tra được bản mới: {e}"))?
+        .ok_or("Bạn đang dùng bản mới nhất.")?;
+
+    let mut downloaded: u64 = 0;
+    let h1 = app.clone();
+    let h2 = app.clone();
+    update
+        .download_and_install(
+            move |chunk, total| {
+                downloaded += chunk as u64;
+                let _ = h1.emit(
+                    "update-progress",
+                    UpdateProgress { phase: "downloading".into(), downloaded, total: total.unwrap_or(0) },
+                );
+            },
+            move || {
+                let _ = h2.emit(
+                    "update-progress",
+                    UpdateProgress { phase: "installing".into(), downloaded: 0, total: 0 },
+                );
+            },
+        )
+        .await
+        .map_err(|e| format!("Cập nhật thất bại: {e}"))?;
+
+    app.restart()
+}
+
 /// Mở trang tải bản mới bằng trình duyệt mặc định (chỉ cho phép đúng repo của app)
 #[tauri::command]
 async fn open_release_page(url: String) -> Result<(), String> {
@@ -779,6 +840,7 @@ async fn open_release_page(url: String) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             user_home,
             list_profiles,
@@ -788,6 +850,7 @@ pub fn run() {
             get_current,
             test_profile,
             check_update,
+            install_update,
             open_release_page
         ])
         .run(tauri::generate_context!())

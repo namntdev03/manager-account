@@ -1,6 +1,6 @@
 {
   "name": "manager-account",
-  "version": "0.1.0",
+  "version": "0.2.2",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
   "packageManager": "pnpm@9.15.0",
@@ -9,7 +9,8 @@
     "tauri": "tauri",
     "sync:license": "node scripts/sync-license.mjs",
     "dev": "node scripts/sync-license.mjs && tauri dev",
-    "build": "node scripts/sync-license.mjs && tauri build"
+    "build": "node scripts/sync-license.mjs && tauri build",
+    "set:pubkey": "node scripts/set-pubkey.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

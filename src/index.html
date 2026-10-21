@@ -46,7 +46,8 @@
     <div class="update-bar" id="updateBar" hidden>
       <div class="upd-txt"><strong id="updTitle"></strong><small id="updSub"></small></div>
       <div class="upd-actions">
-        <button type="button" class="btn-w" id="updOpen">Xem &amp; tải về</button>
+        <button type="button" class="btn-w" id="updNow">Cập nhật ngay</button>
+        <button type="button" class="btn-g sm" id="updOpen">Chi tiết</button>
         <button type="button" class="btn-g sm" id="updLater">Để sau</button>
       </div>
     </div>
@@ -97,6 +98,7 @@
           <strong>Dữ liệu của bạn ở lại trên máy</strong>
           <ul>
             <li>Khi kiểm tra cập nhật, app chỉ gửi <b>một yêu cầu đọc (GET)</b> tới <code>api.github.com/repos/namntdev03/manager-account/releases/latest</code>.</li>
+            <li>Khi bạn bấm <b>Cập nhật ngay</b>, app tải file cập nhật từ <b>GitHub Releases của dự án</b> và kiểm tra chữ ký số trước khi cài. Không có dữ liệu nào của bạn được gửi đi.</li>
             <li>App <b>không gửi</b> tên, email, token, SSH key, danh sách tài khoản, đường dẫn repo hay bất kỳ dữ liệu nào của bạn.</li>
             <li>GitHub chỉ thấy địa chỉ IP và yêu cầu như mọi lượt truy cập web thông thường. Bạn có thể tắt tự kiểm tra ở trên.</li>
             <li>Tài khoản, token và cấu hình chỉ nằm trên máy này (token trong kho bảo mật của hệ điều hành).</li>
@@ -144,9 +146,9 @@
           <ul class="feat">
             <li><b>Dữ liệu chỉ nằm trên máy bạn.</b> Không có server của app, không tài khoản người dùng, không thống kê, không quảng cáo, không bán hay chia sẻ dữ liệu cho bên thứ ba.</li>
             <li><b>Nơi lưu:</b> thông tin tài khoản (tên, email, host, đường dẫn key) trong thư mục dữ liệu của app; <b>token trong kho bảo mật của hệ điều hành</b> (Keychain / Credential Manager / Secret Service), không ghi vào file thường; private key dán vào app lưu thành file riêng quyền 600.</li>
-            <li><b>Khi nào app dùng mạng:</b> (1) kiểm tra bản cập nhật, chỉ một yêu cầu đọc tới GitHub Releases của dự án, tắt được ở <i>Cài đặt</i>; (2) khi bạn bấm <i>Test kết nối</i>, chỉ tới đúng nền tảng của tài khoản đó.</li>
+            <li><b>Khi nào app dùng mạng:</b> (1) kiểm tra bản cập nhật, chỉ một yêu cầu đọc tới GitHub Releases của dự án, tắt được ở <i>Cài đặt</i>; (2) khi bạn bấm <i>Cập nhật ngay</i>, tải file cập nhật từ GitHub Releases của dự án; (3) khi bạn bấm <i>Test kết nối</i>, chỉ tới đúng nền tảng của tài khoản đó.</li>
             <li><b>Không bao giờ gửi</b> tên, email, token, SSH key, danh sách tài khoản hay đường dẫn repo của bạn tới bất kỳ đâu.</li>
-            <li><b>Cập nhật:</b> app chỉ thông báo có bản mới, không tự tải hay tự cài.</li>
+            <li><b>Cập nhật:</b> app báo khi có bản mới; chỉ khi bạn bấm <i>Cập nhật ngay</i> app mới tải về. File cập nhật được kiểm tra chữ ký số (minisign) trước khi cài, file giả hoặc bị sửa sẽ bị từ chối.</li>
             <li><b>Xoá dữ liệu:</b> xoá tài khoản trong app sẽ xoá token và key tương ứng. Muốn gỡ sạch, xoá thư mục dữ liệu của app (macOS: <code>~/Library/Application Support/com.nguyenthanhnam.manageraccount</code>; Windows: <code>%APPDATA%\com.nguyenthanhnam.manageraccount</code>; Linux: <code>~/.local/share/com.nguyenthanhnam.manageraccount</code>) và mục <code>manager-account</code> trong Keychain / Credential Manager.</li>
           </ul>
         </div>

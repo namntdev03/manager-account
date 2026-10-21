@@ -234,7 +234,7 @@
     $("#updateBar").hidden = !showUpd;
     if (showUpd) {
       $("#updTitle").textContent = `Có bản mới ${u.latest}`;
-      $("#updSub").textContent = `Bạn đang dùng v${String(u.current).replace(/^v/, "")}`;
+      if (!installing) $("#updSub").textContent = `Bạn đang dùng v${String(u.current).replace(/^v/, "")}`;
     }
     $("#verText").textContent = `Manager Account${S.version ? " v" + String(S.version).replace(/^v/, "") : ""}`;
     $("#autoUpd").checked = S.autoUpd;
@@ -444,6 +444,39 @@
     }
   }
 
+  // Tải + cài bản mới ngay trong app (chữ ký số được kiểm tra trước khi cài, xong tự khởi động lại)
+  let installing = false;
+  function setUpdBusy(busy, text) {
+    installing = busy;
+    ["#updNow", "#updOpen", "#updLater"].forEach((id) => ($(id).disabled = busy));
+    $("#updNow").textContent = busy ? "Đang cập nhật…" : "Cập nhật ngay";
+    if (text) $("#updSub").textContent = text;
+  }
+  async function installUpdate() {
+    if (installing) return;
+    setUpdBusy(true, "Đang chuẩn bị tải…");
+    log("▶ Bắt đầu cập nhật app");
+    try {
+      await invoke("install_update"); // thành công thì app tự khởi động lại
+    } catch (e) {
+      setUpdBusy(false);
+      renderChrome();
+      log(`✗ Cập nhật lỗi: ${e}`);
+      toast(String(e), "bad");
+    }
+  }
+  if (T.event && T.event.listen) {
+    T.event.listen("update-progress", (ev) => {
+      const p = ev.payload || {};
+      if (p.phase === "downloading") {
+        const pct = p.total ? Math.min(100, Math.round((p.downloaded / p.total) * 100)) : null;
+        $("#updSub").textContent = pct === null ? "Đang tải…" : `Đang tải… ${pct}%`;
+      } else if (p.phase === "installing") {
+        $("#updSub").textContent = "Đang cài đặt, app sẽ tự khởi động lại…";
+      }
+    });
+  }
+
   async function doRefresh() {
     S.busy = "refresh";
     renderChrome();
@@ -505,6 +538,7 @@
   $("#updOpen").addEventListener("click", async () => {
     try { await invoke("open_release_page", { url: S.update.url }); } catch (e) { toast(String(e), "bad"); }
   });
+  $("#updNow").addEventListener("click", installUpdate);
   $("#updLater").addEventListener("click", () => {
     store.set("dismiss", S.update?.latest || "");
     renderChrome();

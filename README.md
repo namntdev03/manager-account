@@ -28,7 +28,7 @@ Mỗi tài khoản (profile) do bạn tự nhập một lần: `user.name`, `use
   2. **Khi bạn bấm “Test kết nối”** trên một tài khoản: SSH tới `git@<host>`, hoặc gọi API `/user` của GitHub/GitLab
      để xác minh token. Chỉ tới đúng nền tảng của tài khoản đó.
 - Việc `git push/pull` do chính git thực hiện, không đi qua app.
-- Bản mới chỉ được **thông báo**; bạn tự bấm để mở trang tải về, app không tự tải hay tự cài.
+- App chỉ tải bản mới khi bạn bấm **Cập nhật ngay**: file lấy từ GitHub Releases của dự án và được kiểm tra chữ ký số (minisign) trước khi cài.
 
 ## Cài trên macOS (bản tải từ Releases)
 
@@ -40,6 +40,26 @@ xattr -cr "/Applications/Manager Account.app"
 ```
 
 Muốn mở thẳng không cảnh báo cần ký bằng tài khoản Apple Developer và công chứng (notarize).
+
+## Thiết lập cập nhật tự động (làm một lần)
+
+App tự tải và cài bản mới bằng plugin updater của Tauri. Cần một cặp khoá ký:
+
+```bash
+# 1. Tạo cặp khoá (đặt mật khẩu hoặc để trống). TUYỆT ĐỐI giữ kín và sao lưu file .key
+pnpm tauri signer generate -w ~/.tauri/manager-account.key
+
+# 2. Ghi public key (file .key.pub) vào src-tauri/tauri.conf.json
+pnpm set:pubkey
+```
+
+3. Vào GitHub repo → **Settings → Secrets and variables → Actions** → thêm 2 secret:
+   - `TAURI_SIGNING_PRIVATE_KEY`: toàn bộ nội dung file `~/.tauri/manager-account.key`
+   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: mật khẩu đã đặt (để trống nếu không đặt)
+4. Commit và phát hành bản mới (xem bên dưới). Bản đầu tiên có updater phải được cài thủ công;
+   từ bản sau trở đi người dùng cập nhật ngay trong app.
+
+> Mất private key thì các bản đã cài không thể nhận cập nhật nữa. Không bao giờ commit file `.key` lên git.
 
 ## Phát hành bản mới
 
