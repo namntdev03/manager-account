@@ -103,3 +103,6 @@ src-tauri/tauri.conf.json
 Mã nguồn được công khai để xem và tham khảo, **không phải phần mềm mã nguồn mở**.
 Bạn được dùng app cho mục đích cá nhân/nội bộ; **không được** sao chép, sửa, phát hành lại, bán hoặc nhận là sản phẩm của mình.
 Chi tiết trong file [LICENSE](LICENSE). Copyright © 2026 Nguyen Thanh Nam.
+
+App hiển thị giấy phép trong menu **Giới thiệu** từ file `src/license.js`, được sinh tự động từ `LICENSE`
+(`pnpm dev` / `pnpm build` tự chạy `scripts/sync-license.mjs`). Sửa `LICENSE` xong thì chạy lại một trong hai lệnh đó rồi commit cả `src/license.js`.

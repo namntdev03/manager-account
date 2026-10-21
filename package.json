@@ -7,8 +7,9 @@
   "description": "Chuyển nhanh giữa nhiều tài khoản Git (macOS, Windows, Linux)",
   "scripts": {
     "tauri": "tauri",
-    "dev": "tauri dev",
-    "build": "tauri build"
+    "sync:license": "node scripts/sync-license.mjs",
+    "dev": "node scripts/sync-license.mjs && tauri dev",
+    "build": "node scripts/sync-license.mjs && tauri build"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

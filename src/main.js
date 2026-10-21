@@ -22,6 +22,7 @@
     layout: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
     x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
     sliders: '<line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/>',
+    info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
     chevron: '<path d="m6 9 6 6 6-6"/>',
   };
   const icon = (n, c = "") =>
@@ -48,6 +49,7 @@
     accounts: { title: "Tài khoản", sub: "Chọn tài khoản Git để dùng ngay" },
     log: { title: "Nhật ký", sub: "Lịch sử các thao tác đổi tài khoản trong phiên này" },
     settings: { title: "Cài đặt", sub: "Phiên bản, cập nhật và quyền riêng tư" },
+    about: { title: "Giới thiệu", sub: "App này làm gì, chính sách dữ liệu và giấy phép" },
   };
 
   // Nền tảng: thêm nền tảng mới chỉ cần thêm 1 dòng vào đây
@@ -216,6 +218,7 @@
     $("#page-accounts").hidden = S.page !== "accounts";
     $("#page-log").hidden = S.page !== "log";
     $("#page-settings").hidden = S.page !== "settings";
+    $("#page-about").hidden = S.page !== "about";
     const curPlat = platformList().find((p) => p.id === S.platform);
     $("#pageTitle").textContent =
       S.page === "accounts" && curPlat ? `${PAGES.accounts.title} · ${curPlat.name}` : PAGES[S.page].title;
@@ -235,6 +238,7 @@
     }
     $("#verText").textContent = `Manager Account${S.version ? " v" + String(S.version).replace(/^v/, "") : ""}`;
     $("#autoUpd").checked = S.autoUpd;
+    $("#aboutVer").textContent = `Phiên bản ${S.version ? "v" + String(S.version).replace(/^v/, "") : "—"}`;
   }
 
   function render() {
@@ -482,6 +486,18 @@
   });
   $("#pickRepo").addEventListener("click", pickRepo);
   $("#chkBtn").addEventListener("click", () => checkUpdate(true));
+  $("#licenseText").textContent = window.APP_LICENSE || "(Không đọc được nội dung LICENSE)";
+  $("#aboutRepo").addEventListener("click", async () => {
+    try { await invoke("open_release_page", { url: "https://github.com/namntdev03/manager-account" }); } catch (e) { toast(String(e), "bad"); }
+  });
+  $("#copyLicense").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(window.APP_LICENSE || "");
+      toast("Đã sao chép giấy phép", "ok");
+    } catch {
+      toast("Không sao chép được, hãy bôi đen và copy thủ công.", "bad");
+    }
+  });
   $("#autoUpd").addEventListener("change", (e) => {
     S.autoUpd = e.target.checked;
     store.set("autoUpd", S.autoUpd ? "1" : "0");

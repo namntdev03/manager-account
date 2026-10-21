@@ -21,6 +21,7 @@
         </div>
         <button class="nav-item" data-page="log"><i data-i="history"></i><span>Nhật ký</span><em id="logCount" hidden></em></button>
         <button class="nav-item" data-page="settings"><i data-i="sliders"></i><span>Cài đặt</span></button>
+        <button class="nav-item" data-page="about"><i data-i="info"></i><span>Giới thiệu</span></button>
       </nav>
     </div>
   </aside>
@@ -103,6 +104,62 @@
         </div>
       </div>
     </section>
+
+    <section id="page-about" hidden>
+      <div class="about">
+        <div class="set-card hero">
+          <div class="hero-logo">M</div>
+          <div>
+            <h3>Manager Account</h3>
+            <p id="aboutVer">Phiên bản —</p>
+            <p>Đổi nhanh giữa nhiều tài khoản Git chỉ với một cú bấm. Chạy trên macOS, Windows và Linux.</p>
+          </div>
+          <button type="button" class="btn ghost" id="aboutRepo">Trang dự án trên GitHub</button>
+        </div>
+
+        <div class="set-card">
+          <h3>App này làm gì?</h3>
+          <p class="lead">Nếu bạn dùng nhiều tài khoản GitHub, GitLab hay Bitbucket (cá nhân, công ty…), mỗi lần đổi qua lại thường phải sửa tên, email và đăng nhập lại thủ công. App gom tất cả vào một chỗ.</p>
+          <ul class="feat">
+            <li><b>Lưu nhiều tài khoản.</b> Mỗi tài khoản gồm <code>user.name</code>, <code>user.email</code> và cách đăng nhập: SSH key hoặc Personal Access Token.</li>
+            <li><b>Đổi tài khoản một cú bấm,</b> áp dụng cho toàn máy hoặc chỉ cho một repo. Tuỳ chọn tự đổi remote giữa SSH và HTTPS cho khớp.</li>
+            <li><b>Biết tài khoản nào đang hoạt động</b> trên từng nền tảng, lọc theo GitHub / GitLab / Bitbucket hoặc host khác.</li>
+            <li><b>Test kết nối</b> để chắc key hoặc token đang đăng nhập đúng tài khoản.</li>
+          </ul>
+        </div>
+
+        <div class="set-card">
+          <h3>App thay đổi gì trong git của bạn?</h3>
+          <p class="lead">App chỉ chạy lệnh <code>git config</code> bình thường và ghi các khoá sau, bạn có thể tự kiểm tra bất cứ lúc nào:</p>
+          <ul class="feat">
+            <li><code>user.name</code>, <code>user.email</code>: danh tính trên commit.</li>
+            <li><code>core.sshCommand</code>: trỏ tới đúng SSH key (tài khoản dùng SSH).</li>
+            <li><code>credential.https://&lt;host&gt;.username</code> và nạp token vào <code>git credential</code> của hệ điều hành (tài khoản dùng token).</li>
+            <li><code>remote.&lt;tên&gt;.url</code>: chỉ khi bạn tick “Đổi remote SSH ⇄ HTTPS”.</li>
+          </ul>
+        </div>
+
+        <div class="set-card wide">
+          <h3>Chính sách dữ liệu &amp; quyền riêng tư</h3>
+          <ul class="feat">
+            <li><b>Dữ liệu chỉ nằm trên máy bạn.</b> Không có server của app, không tài khoản người dùng, không thống kê, không quảng cáo, không bán hay chia sẻ dữ liệu cho bên thứ ba.</li>
+            <li><b>Nơi lưu:</b> thông tin tài khoản (tên, email, host, đường dẫn key) trong thư mục dữ liệu của app; <b>token trong kho bảo mật của hệ điều hành</b> (Keychain / Credential Manager / Secret Service), không ghi vào file thường; private key dán vào app lưu thành file riêng quyền 600.</li>
+            <li><b>Khi nào app dùng mạng:</b> (1) kiểm tra bản cập nhật, chỉ một yêu cầu đọc tới GitHub Releases của dự án, tắt được ở <i>Cài đặt</i>; (2) khi bạn bấm <i>Test kết nối</i>, chỉ tới đúng nền tảng của tài khoản đó.</li>
+            <li><b>Không bao giờ gửi</b> tên, email, token, SSH key, danh sách tài khoản hay đường dẫn repo của bạn tới bất kỳ đâu.</li>
+            <li><b>Cập nhật:</b> app chỉ thông báo có bản mới, không tự tải hay tự cài.</li>
+            <li><b>Xoá dữ liệu:</b> xoá tài khoản trong app sẽ xoá token và key tương ứng. Muốn gỡ sạch, xoá thư mục dữ liệu của app (macOS: <code>~/Library/Application Support/com.nguyenthanhnam.manageraccount</code>; Windows: <code>%APPDATA%\com.nguyenthanhnam.manageraccount</code>; Linux: <code>~/.local/share/com.nguyenthanhnam.manageraccount</code>) và mục <code>manager-account</code> trong Keychain / Credential Manager.</li>
+          </ul>
+        </div>
+
+        <div class="set-card wide">
+          <div class="set-row">
+            <h3>Giấy phép</h3>
+            <button type="button" class="btn ghost" id="copyLicense">Sao chép</button>
+          </div>
+          <pre class="license-box" id="licenseText"></pre>
+        </div>
+      </div>
+    </section>
   </main>
 
   <div id="toast" role="status" aria-live="polite"></div>
@@ -178,6 +235,7 @@
     </form>
   </dialog>
 
+  <script src="license.js"></script>
   <script src="main.js"></script>
 </body>
 </html>
