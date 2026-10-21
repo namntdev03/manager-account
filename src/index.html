@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Manager Account</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- SIDEBAR -->
+  <aside class="side">
+    <div>
+      <div class="brand">
+        <div class="brand-logo">M</div>
+        <span>Manager Account</span>
+      </div>
+      <nav class="nav" id="nav">
+        <div class="nav-group" id="accGroup">
+          <button class="nav-item active" id="navAcc" data-page="accounts"><i data-i="users"></i><span>Tài khoản</span><i data-i="chevron" class="chev"></i></button>
+          <div class="sub" id="subNav"></div>
+        </div>
+        <button class="nav-item" data-page="log"><i data-i="history"></i><span>Nhật ký</span><em id="logCount" hidden></em></button>
+      </nav>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <header class="head">
+      <div>
+        <h1 id="pageTitle">Tài khoản</h1>
+        <p id="pageSub">Chọn tài khoản Git để dùng ngay</p>
+      </div>
+      <div class="controls">
+        <div class="seg" id="scopeSeg">
+          <button type="button" data-scope="global">Toàn máy</button>
+          <button type="button" data-scope="repo">Một repo</button>
+        </div>
+        <button type="button" id="refreshBtn" class="btn ghost"><i data-i="refresh"></i><span>Làm mới</span></button>
+        <button type="button" id="addBtn" class="btn dark"><i data-i="plus"></i><span>Thêm tài khoản</span></button>
+      </div>
+    </header>
+
+    <section id="page-accounts">
+      <div class="repo-bar" id="repoBar" hidden>
+        <div class="repo-ic"><i data-i="folder"></i></div>
+        <div class="repo-info">
+          <small>Thư mục repo</small>
+          <strong id="repoPath">Chưa chọn thư mục</strong>
+        </div>
+        <button type="button" id="clearRepo" class="x-btn" title="Bỏ thư mục này (không lưu lại)" aria-label="Bỏ thư mục repo"><i data-i="x"></i></button>
+        <label class="check" title="Tự đổi URL remote giữa SSH và HTTPS cho khớp tài khoản">
+          <input type="checkbox" id="convert" />
+          <span>Đổi remote SSH ⇄ HTTPS</span>
+        </label>
+        <button type="button" id="pickRepo" class="btn dark">Chọn thư mục…</button>
+      </div>
+      <div class="cards" id="cards"></div>
+    </section>
+
+    <section id="page-log" hidden>
+      <div class="glass-card log-card">
+        <div class="card-head">
+          <h3>Nhật ký thao tác</h3>
+          <button type="button" id="clearLog" class="btn-g sm">Xoá nhật ký</button>
+        </div>
+        <pre id="log"></pre>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <!-- FORM THÊM / SỬA -->
+  <dialog id="dlg">
+    <form id="form" autocomplete="off">
+      <div class="dlg-head">
+        <h3 id="dlgTitle">Thêm tài khoản</h3>
+        <p>Bạn tự nhập một lần, sau đó chỉ cần bấm chọn để đổi.</p>
+      </div>
+
+      <div class="two">
+        <label>Tên hiển thị
+          <input id="f_name" placeholder="Ví dụ: Công ty" required />
+        </label>
+        <label>Host
+          <input id="f_host" list="hosts" value="github.com" required />
+          <datalist id="hosts">
+            <option value="github.com"></option>
+            <option value="gitlab.com"></option>
+            <option value="bitbucket.org"></option>
+          </datalist>
+        </label>
+      </div>
+
+      <div class="two">
+        <label>user.name (tên trên commit)
+          <input id="f_uname" required />
+        </label>
+        <label>user.email
+          <input id="f_email" type="email" required />
+        </label>
+      </div>
+
+      <fieldset>
+        <legend>Cách đăng nhập</legend>
+        <div class="seg" id="authSeg">
+          <button type="button" data-auth="ssh">SSH key</button>
+          <button type="button" data-auth="token">Personal Access Token</button>
+        </div>
+
+        <div id="authSsh" class="auth-box">
+          <label>File SSH key (private key)
+            <div class="input-row">
+              <input id="f_keypath" placeholder="~/.ssh/id_ed25519_congty" />
+              <button type="button" id="pickKey" class="btn ghost">Chọn file…</button>
+            </div>
+          </label>
+          <label>Hoặc dán nội dung private key
+            <textarea id="f_keytext" rows="4" spellcheck="false"
+              placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;..."></textarea>
+          </label>
+          <p class="hint">Nếu dán key, app lưu thành file riêng (quyền 600) trong thư mục dữ liệu của app. Key có passphrase cần nạp vào ssh-agent trước.</p>
+        </div>
+
+        <div id="authToken" class="auth-box" hidden>
+          <label>Username đăng nhập
+            <input id="f_login" placeholder="Tên tài khoản trên GitHub/GitLab" />
+          </label>
+          <label>Personal Access Token
+            <input id="f_token" type="password" placeholder="ghp_… / glpat-…" />
+          </label>
+          <p class="hint">Token được lưu trong kho bảo mật của hệ điều hành (Keychain / Credential Manager / Secret Service), không ghi vào file thường.</p>
+        </div>
+      </fieldset>
+
+      <p class="error" id="formErr" hidden></p>
+      <div class="actions">
+        <button type="button" id="cancel" class="btn ghost">Huỷ</button>
+        <button type="submit" class="btn dark" id="saveBtn">Lưu</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="main.js"></script>
+</body>
+</html>
