@@ -30,6 +30,17 @@ Mỗi tài khoản (profile) do bạn tự nhập một lần: `user.name`, `use
 - Việc `git push/pull` do chính git thực hiện, không đi qua app.
 - Bản mới chỉ được **thông báo**; bạn tự bấm để mở trang tải về, app không tự tải hay tự cài.
 
+## Cài trên macOS (bản tải từ Releases)
+
+Bản phát hành được **ký ad-hoc** (miễn phí, chưa công chứng Apple). Lần đầu mở, macOS có thể chặn:
+bấm chuột phải vào app → **Mở** → **Mở**. Nếu báo “đã bị hỏng”, chạy:
+
+```bash
+xattr -cr "/Applications/Manager Account.app"
+```
+
+Muốn mở thẳng không cảnh báo cần ký bằng tài khoản Apple Developer và công chứng (notarize).
+
 ## Phát hành bản mới
 
 1. Tăng `version` trong `src-tauri/tauri.conf.json` (và `Cargo.toml`, `package.json` cho khớp), ví dụ `0.2.0`.
