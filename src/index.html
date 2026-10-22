@@ -30,6 +30,7 @@
           <div class="sub" id="subNav"></div>
         </div>
         <button class="nav-item" data-page="hosts"><i data-i="server"></i><span>SSH host</span></button>
+        <button class="nav-item" data-page="backup"><i data-i="archive"></i><span>Kho lưu trữ</span></button>
         <button class="nav-item" data-page="stats"><i data-i="activity"></i><span>Hiệu năng</span></button>
         <button class="nav-item" data-page="settings"><i data-i="sliders"></i><span>Cài đặt</span></button>
         <button class="nav-item" data-page="about"><i data-i="info"></i><span>Giới thiệu</span></button>
@@ -95,6 +96,50 @@
       <div class="tabs" id="termTabs" hidden></div>
       <div id="hostList"><div class="cards" id="hostCards"></div></div>
       <div id="termView" hidden></div>
+    </section>
+
+    <section id="page-backup" hidden>
+      <div class="set-card">
+        <div class="set-row">
+          <div>
+            <h3>Sao lưu ra file</h3>
+            <p>Gom toàn bộ tài khoản, SSH host và quy tắc theo thư mục vào một file đã mã hoá bằng mật khẩu của bạn.</p>
+          </div>
+        </div>
+        <ul class="bk-list">
+          <li>Tài khoản Git, npm, SSH cùng <b>token, mật khẩu và private key</b> (đã mã hoá trong file).</li>
+          <li>Danh sách SSH host và các quy tắc theo thư mục.</li>
+          <li>Không gồm: cài đặt giao diện, file đã tải lên hay tải về.</li>
+        </ul>
+        <div class="two bk-form">
+          <label>Mật khẩu bảo vệ file (ít nhất 8 ký tự)
+            <input id="bk_pass" type="password" autocomplete="new-password" />
+          </label>
+          <label>Nhập lại mật khẩu
+            <input id="bk_pass2" type="password" autocomplete="new-password" />
+          </label>
+        </div>
+        <p class="hint">Mất mật khẩu này thì <b>không thể mở lại file</b>, app không giữ bản nào. Hãy cất file ở nơi an toàn.</p>
+        <div class="bk-actions"><button type="button" id="bkExport" class="btn dark">Tạo file sao lưu…</button></div>
+      </div>
+
+      <div class="set-card">
+        <div class="set-row">
+          <div>
+            <h3>Khôi phục từ file</h3>
+            <p>Dùng khi chuyển sang máy mới hoặc cài lại máy. Dữ liệu trong file được thêm vào app, tài khoản trùng mã sẽ bị ghi đè.</p>
+          </div>
+        </div>
+        <div class="bk-file">
+          <code id="rsFile">Chưa chọn file</code>
+          <button type="button" id="rsPick" class="btn ghost">Chọn file…</button>
+        </div>
+        <label class="bk-form">Mật khẩu của file sao lưu
+          <input id="rs_pass" type="password" autocomplete="off" />
+        </label>
+        <div class="bk-actions"><button type="button" id="rsGo" class="btn dark">Khôi phục</button></div>
+      </div>
+      <p class="bk-msg" id="bkMsg" hidden></p>
     </section>
 
     <section id="page-stats" hidden>
@@ -237,6 +282,16 @@
             <button type="button" id="viewPass" class="btn ghost" hidden>Hiện</button>
           </div>
         </label>
+        <label>Passphrase của key (tuỳ chọn)
+          <div class="input-row">
+            <input id="f_sshpp" type="password" placeholder="Chỉ cần nếu key của bạn có đặt passphrase" />
+            <button type="button" id="viewPP" class="btn ghost" hidden>Hiện</button>
+          </div>
+        </label>
+        <label class="check" id="clearPPBox" hidden>
+          <input type="checkbox" id="f_clearpp" />
+          <span>Xoá passphrase đã lưu</span>
+        </label>
         <p class="hint">Bạn có thể dùng mật khẩu, key (RSA, ED25519, ECDSA… mọi loại key OpenSSH) hoặc cả hai. Mật khẩu lưu trong kho bảo mật của hệ điều hành và được tự điền khi kết nối. Không có cả hai thì terminal sẽ hỏi.</p>
       </div>
 
@@ -318,6 +373,20 @@
         <button type="submit" class="btn dark" id="saveBtn">Lưu</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- XỬ LÝ MỤC TRÙNG KHI KHÔI PHỤC -->
+  <dialog id="cfDlg">
+    <div class="dlg-head">
+      <h3>Có mục trùng với dữ liệu đang có</h3>
+      <p id="cfSub"></p>
+    </div>
+    <div class="dlg-body"><div class="cf-list" id="cfList"></div></div>
+    <div class="actions">
+      <button type="button" id="cfCancel" class="btn ghost">Huỷ</button>
+      <button type="button" id="cfKeep" class="btn ghost">Không ghi đè, thêm bản mới</button>
+      <button type="button" id="cfOver" class="btn dark">Ghi đè</button>
+    </div>
   </dialog>
 
   <!-- QUY TẮC THEO THƯ MỤC -->

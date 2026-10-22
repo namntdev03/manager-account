@@ -34,6 +34,9 @@ struct Profile {
     /// token đã được lưu trong keychain của hệ điều hành
     #[serde(default)]
     has_token: bool,
+    /// SSH: passphrase của private key đã được lưu trong keychain
+    #[serde(default)]
+    has_passphrase: bool,
     /// "git" (mặc định) hoặc "npm"
     #[serde(default = "default_kind")]
     kind: String,
@@ -64,6 +67,10 @@ struct ProfileInput {
     kind: Option<String>,
     registry: Option<String>,
     scope: Option<String>,
+    /// SSH: passphrase của key (trống = giữ nguyên)
+    passphrase: Option<String>,
+    /// SSH: xoá passphrase đã lưu
+    clear_passphrase: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -301,6 +308,11 @@ fn npmrc_set(path: &PathBuf, key: &str, val: &str) -> Result<(), String> {
 
 /// Chỉ cho phép ký tự an toàn (chữ, số, . _ - :) và không bắt đầu bằng '-', để không bị
 /// hiểu nhầm thành tuỳ chọn của ssh hay chèn lệnh vào shell.
+/// Tên mục keychain riêng cho passphrase của key SSH.
+fn pp_key(id: &str) -> String {
+    format!("{id}#passphrase")
+}
+
 fn valid_ident(s: &str) -> bool {
     !s.is_empty()
         && !s.starts_with('-')
@@ -346,6 +358,22 @@ fn save_ssh_profile(app: &tauri::AppHandle, input: ProfileInput) -> Result<Profi
         has_pw = true;
     }
 
+    // passphrase của key (tuỳ chọn): lưu riêng trong keychain
+    let pp = input.passphrase.as_deref().map(str::trim).unwrap_or("");
+    let mut has_pp = existing.as_ref().map(|e| e.has_passphrase).unwrap_or(false);
+    if input.clear_passphrase.unwrap_or(false) {
+        if let Ok(e) = entry(&pp_key(&id)) {
+            let _ = e.delete_credential();
+        }
+        has_pp = false;
+    }
+    if !pp.is_empty() {
+        entry(&pp_key(&id))?
+            .set_password(pp)
+            .map_err(|e| format!("Không lưu được passphrase vào keychain: {e}"))?;
+        has_pp = true;
+    }
+
     let p = Profile {
         id: id.clone(),
         name,
@@ -356,6 +384,7 @@ fn save_ssh_profile(app: &tauri::AppHandle, input: ProfileInput) -> Result<Profi
         login: user,
         ssh_key_path: key_path,
         has_token: has_pw,
+        has_passphrase: has_pp,
         kind: "ssh".to_string(),
         registry: String::new(),
         scope: String::new(),
@@ -469,12 +498,12 @@ fn ssh_args(h: &Host, acct: Option<&Profile>) -> Result<(Vec<String>, SshEnv), S
             a.extend(["-i".to_string(), k, "-o".to_string(), "IdentitiesOnly=yes".to_string()]);
             has_key = true;
         }
-        if p.has_token {
+        if p.has_token || p.has_passphrase {
             let exe = std::env::current_exe().map_err(|e| e.to_string())?;
             envs.push(("SSH_ASKPASS".to_string(), exe.to_string_lossy().to_string()));
             envs.push(("SSH_ASKPASS_REQUIRE".to_string(), "force".to_string()));
             envs.push(("MA_ASKPASS_ID".to_string(), p.id.clone()));
-            if !has_key {
+            if p.has_token && !has_key {
                 // chỉ dùng mật khẩu: bỏ qua các key trong ssh-agent để khỏi bị server từ chối vì thử quá nhiều key
                 a.extend([
                     "-o".to_string(),
@@ -501,11 +530,17 @@ fn ssh_args(h: &Host, acct: Option<&Profile>) -> Result<(Vec<String>, SshEnv), S
 /// in mật khẩu lấy từ keychain ra stdout rồi thoát, không mở giao diện.
 fn askpass_mode(id: &str) {
     let prompt = std::env::args().nth(1).unwrap_or_default().to_lowercase();
-    if prompt.contains("password") {
-        if let Ok(pw) = entry(id).and_then(|e| e.get_password().map_err(|e| e.to_string())) {
-            println!("{pw}");
-            return;
-        }
+    // "Enter passphrase for key ..." -> passphrase của key; "user@host's password:" -> mật khẩu
+    let key = if prompt.contains("passphrase") {
+        pp_key(id)
+    } else if prompt.contains("password") {
+        id.to_string()
+    } else {
+        std::process::exit(1);
+    };
+    if let Ok(pw) = entry(&key).and_then(|e| e.get_password().map_err(|e| e.to_string())) {
+        println!("{pw}");
+        return;
     }
     std::process::exit(1);
 }
@@ -533,7 +568,7 @@ fn remote_run(
         .ok_or("Không tìm thấy SSH host này")?;
     let acct = if account_id.is_empty() { None } else { Some(find_profile(app, account_id)?) };
     let (mut args, envs) = ssh_args(h, acct.as_ref())?;
-    if !acct.as_ref().map(|p| p.has_token).unwrap_or(false) {
+    if !acct.as_ref().map(|p| p.has_token || p.has_passphrase).unwrap_or(false) {
         // không có mật khẩu lưu: không có terminal để hỏi, nên không chờ nhập
         args.splice(0..0, ["-o".to_string(), "BatchMode=yes".to_string()]);
     }
@@ -1059,6 +1094,11 @@ async fn rules_delete(app: tauri::AppHandle, id: String) -> Result<(), String> {
 /// Gọi sau khi sửa/xoá tài khoản: ghi lại file của từng quy tắc, bỏ quy tắc có tài khoản đã bị xoá.
 #[tauri::command]
 async fn rules_sync(app: tauri::AppHandle) -> Result<(), String> {
+    rules_sync_inner(&app)
+}
+
+fn rules_sync_inner(app: &tauri::AppHandle) -> Result<(), String> {
+    let app = app.clone();
     let rules = load_rules(&app)?;
     let profiles = load_profiles(&app)?;
     let mut keep: Vec<Rule> = vec![];
@@ -1079,6 +1119,286 @@ async fn rules_sync(app: tauri::AppHandle) -> Result<(), String> {
         }
     }
     save_rules(&app, &keep)
+}
+
+// ───────────────────────── Kho lưu trữ (sao lưu / khôi phục) ─────────────────────────
+
+#[derive(Serialize, Deserialize)]
+struct Envelope {
+    app: String,
+    version: u32,
+    kdf: String,
+    salt: String,
+    nonce: String,
+    data: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct ProfileBackup {
+    profile: Profile,
+    /// token / mật khẩu lấy từ keychain
+    #[serde(default)]
+    secret: Option<String>,
+    /// nội dung private key (nếu tài khoản có key)
+    #[serde(default)]
+    key: Option<String>,
+    /// passphrase của key SSH
+    #[serde(default)]
+    passphrase: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct BackupData {
+    profiles: Vec<ProfileBackup>,
+    hosts: Vec<Host>,
+    rules: Vec<Rule>,
+}
+
+#[derive(Serialize)]
+struct BackupSummary {
+    profiles: usize,
+    hosts: usize,
+    rules: usize,
+    skipped: usize,
+}
+
+fn derive_key(pass: &str, salt: &[u8]) -> Result<[u8; 32], String> {
+    let mut k = [0u8; 32];
+    argon2::Argon2::default()
+        .hash_password_into(pass.as_bytes(), salt, &mut k)
+        .map_err(|e| format!("Không tạo được khoá mã hoá: {e}"))?;
+    Ok(k)
+}
+
+fn tilde(path: &str) -> String {
+    let p = expand(path).replace('\\', "/");
+    let h = home().replace('\\', "/");
+    if !h.is_empty() && (p == h || p.starts_with(&format!("{h}/"))) {
+        format!("~{}", &p[h.len()..])
+    } else {
+        path.to_string()
+    }
+}
+
+#[tauri::command]
+async fn backup_export(app: tauri::AppHandle, passphrase: String, path: String) -> Result<BackupSummary, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use chacha20poly1305::aead::{Aead, KeyInit};
+        if passphrase.chars().count() < 8 {
+            return Err("Mật khẩu sao lưu cần ít nhất 8 ký tự".to_string());
+        }
+        let profiles = load_profiles(&app)?;
+        let mut items: Vec<ProfileBackup> = vec![];
+        for p in profiles {
+            let secret = if p.has_token {
+                entry(&p.id).ok().and_then(|e| e.get_password().ok())
+            } else {
+                None
+            };
+            let key = if p.ssh_key_path.trim().is_empty() {
+                None
+            } else {
+                fs::read_to_string(expand(&p.ssh_key_path)).ok()
+            };
+            let passphrase = if p.has_passphrase {
+                entry(&pp_key(&p.id)).ok().and_then(|e| e.get_password().ok())
+            } else {
+                None
+            };
+            items.push(ProfileBackup { profile: p, secret, key, passphrase });
+        }
+        let hosts = load_hosts(&app)?;
+        let mut rules = load_rules(&app)?;
+        for r in rules.iter_mut() {
+            r.folder = tilde(&r.folder);
+        }
+        let sum = BackupSummary { profiles: items.len(), hosts: hosts.len(), rules: rules.len(), skipped: 0 };
+        let plain = serde_json::to_vec(&BackupData { profiles: items, hosts, rules }).map_err(|e| e.to_string())?;
+
+        let mut salt = [0u8; 16];
+        let mut nonce = [0u8; 12];
+        getrandom::getrandom(&mut salt).map_err(|e| e.to_string())?;
+        getrandom::getrandom(&mut nonce).map_err(|e| e.to_string())?;
+        let key = derive_key(&passphrase, &salt)?;
+        let cipher = chacha20poly1305::ChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(&key));
+        let ct = cipher
+            .encrypt(chacha20poly1305::Nonce::from_slice(&nonce), plain.as_ref())
+            .map_err(|_| "Không mã hoá được dữ liệu".to_string())?;
+        let env = Envelope {
+            app: "manager-account".into(),
+            version: 1,
+            kdf: "argon2id".into(),
+            salt: B64.encode(salt),
+            nonce: B64.encode(nonce),
+            data: B64.encode(ct),
+        };
+        let out = serde_json::to_string_pretty(&env).map_err(|e| e.to_string())?;
+        fs::write(&path, out).map_err(|e| format!("Không ghi được file sao lưu: {e}"))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+        }
+        Ok(sum)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn decrypt_backup(path: &str, passphrase: &str) -> Result<BackupData, String> {
+    use chacha20poly1305::aead::{Aead, KeyInit};
+    let text = fs::read_to_string(path).map_err(|e| format!("Không đọc được file sao lưu: {e}"))?;
+    let env: Envelope =
+        serde_json::from_str(&text).map_err(|_| "File này không phải file sao lưu của Manager Account".to_string())?;
+    if env.app != "manager-account" || env.version != 1 || env.kdf != "argon2id" {
+        return Err("File sao lưu không tương thích với phiên bản app này".to_string());
+    }
+    let dec = |s: &str| B64.decode(s).map_err(|_| "File sao lưu bị hỏng".to_string());
+    let (salt, nonce, ct) = (dec(&env.salt)?, dec(&env.nonce)?, dec(&env.data)?);
+    if nonce.len() != 12 {
+        return Err("File sao lưu bị hỏng".to_string());
+    }
+    let key = derive_key(passphrase, &salt)?;
+    let cipher = chacha20poly1305::ChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(&key));
+    let plain = cipher
+        .decrypt(chacha20poly1305::Nonce::from_slice(&nonce), ct.as_ref())
+        .map_err(|_| "Sai mật khẩu sao lưu hoặc file bị hỏng".to_string())?;
+    serde_json::from_slice(&plain).map_err(|_| "Nội dung sao lưu không đọc được".to_string())
+}
+
+#[derive(Serialize)]
+struct Conflict {
+    /// "account" | "host" | "rule"
+    kind: String,
+    name: String,
+}
+
+#[derive(Serialize)]
+struct Inspect {
+    profiles: usize,
+    hosts: usize,
+    rules: usize,
+    conflicts: Vec<Conflict>,
+}
+
+/// Mở file sao lưu (kiểm tra mật khẩu) và cho biết mục nào trùng với dữ liệu đang có.
+#[tauri::command]
+async fn backup_inspect(app: tauri::AppHandle, passphrase: String, path: String) -> Result<Inspect, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let data = decrypt_backup(&path, &passphrase)?;
+        let profiles = load_profiles(&app)?;
+        let hosts = load_hosts(&app)?;
+        let rules = load_rules(&app)?;
+        let mut conflicts: Vec<Conflict> = vec![];
+        for b in &data.profiles {
+            if profiles.iter().any(|x| x.id == b.profile.id) {
+                conflicts.push(Conflict { kind: "account".into(), name: b.profile.name.clone() });
+            }
+        }
+        for h in &data.hosts {
+            if hosts.iter().any(|x| x.id == h.id) {
+                conflicts.push(Conflict { kind: "host".into(), name: h.name.clone() });
+            }
+        }
+        for r in &data.rules {
+            if rules.iter().any(|x| x.id == r.id || rule_dir(&x.folder) == rule_dir(&r.folder)) {
+                conflicts.push(Conflict { kind: "rule".into(), name: r.folder.clone() });
+            }
+        }
+        Ok(Inspect { profiles: data.profiles.len(), hosts: data.hosts.len(), rules: data.rules.len(), conflicts })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// overwrite = true: mục trùng mã bị ghi đè. false: mục trùng được thêm thành bản mới (tài khoản, host);
+/// quy tắc theo thư mục trùng thì giữ bản đang có (mỗi thư mục chỉ có một quy tắc).
+#[tauri::command]
+async fn backup_import(
+    app: tauri::AppHandle,
+    passphrase: String,
+    path: String,
+    overwrite: bool,
+) -> Result<BackupSummary, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let data = decrypt_backup(&path, &passphrase)?;
+        let mut sum = BackupSummary { profiles: 0, hosts: 0, rules: 0, skipped: 0 };
+        let mut idmap: HashMap<String, String> = HashMap::new();
+
+        let mut profiles = load_profiles(&app)?;
+        for mut b in data.profiles {
+            let old = b.profile.id.clone();
+            if !overwrite && profiles.iter().any(|x| x.id == old) {
+                let nid = new_id();
+                idmap.insert(old, nid.clone());
+                b.profile.id = nid;
+                b.profile.name = format!("{} (khôi phục)", b.profile.name);
+            }
+            if let Some(k) = b.key.as_deref() {
+                b.profile.ssh_key_path = write_key(&app, &b.profile.id, k)?;
+            }
+            if let Some(s) = b.secret.as_deref() {
+                entry(&b.profile.id)?
+                    .set_password(s)
+                    .map_err(|e| format!("Không lưu được vào keychain: {e}"))?;
+                b.profile.has_token = true;
+            }
+            if let Some(s) = b.passphrase.as_deref() {
+                entry(&pp_key(&b.profile.id))?
+                    .set_password(s)
+                    .map_err(|e| format!("Không lưu được vào keychain: {e}"))?;
+                b.profile.has_passphrase = true;
+            }
+            match profiles.iter().position(|x| x.id == b.profile.id) {
+                Some(i) => profiles[i] = b.profile,
+                None => profiles.push(b.profile),
+            }
+            sum.profiles += 1;
+        }
+        save_profiles(&app, &profiles)?;
+
+        let mut hosts = load_hosts(&app)?;
+        for mut h in data.hosts {
+            if !overwrite && hosts.iter().any(|x| x.id == h.id) {
+                h.id = new_id();
+                h.name = format!("{} (khôi phục)", h.name);
+            }
+            match hosts.iter().position(|x| x.id == h.id) {
+                Some(i) => hosts[i] = h,
+                None => hosts.push(h),
+            }
+            sum.hosts += 1;
+        }
+        save_hosts(&app, &hosts)?;
+
+        let mut rules = load_rules(&app)?;
+        for mut r in data.rules {
+            if let Some(n) = idmap.get(&r.account_id) {
+                r.account_id = n.clone();
+            }
+            let clash = |x: &Rule| x.id == r.id || rule_dir(&x.folder) == rule_dir(&r.folder);
+            if rules.iter().any(|x| clash(x)) {
+                if !overwrite {
+                    sum.skipped += 1;
+                    continue;
+                }
+                for old in rules.iter().filter(|x| clash(x)) {
+                    if let Ok(f) = rule_file(&app, &old.id) {
+                        let _ = fs::remove_file(f);
+                    }
+                }
+                rules.retain(|x| !clash(x));
+            }
+            rules.push(r);
+            sum.rules += 1;
+        }
+        save_rules(&app, &rules)?;
+        // ghi lại file cấu hình và dòng includeIf cho các quy tắc theo thư mục
+        let _ = rules_sync_inner(&app);
+        Ok(sum)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 // ───────────────────────── Đo thông số của chính app ─────────────────────────
@@ -1525,6 +1845,7 @@ fn save_npm_profile(app: &tauri::AppHandle, input: ProfileInput) -> Result<Profi
         login: String::new(),
         ssh_key_path: String::new(),
         has_token: false,
+        has_passphrase: false,
         kind: "npm".to_string(),
         registry,
         scope,
@@ -1583,6 +1904,7 @@ async fn save_profile(app: tauri::AppHandle, input: ProfileInput) -> Result<Prof
         login: String::new(),
         ssh_key_path: String::new(),
         has_token: false,
+        has_passphrase: false,
         kind: "git".to_string(),
         registry: String::new(),
         scope: String::new(),
@@ -1664,6 +1986,15 @@ async fn reveal_password(app: tauri::AppHandle, id: String) -> Result<String, St
         .map_err(|_| "Chưa có mật khẩu nào được lưu cho tài khoản này".to_string())
 }
 
+/// Passphrase của key SSH đã lưu (để xem lại trong form sửa).
+#[tauri::command]
+async fn reveal_passphrase(app: tauri::AppHandle, id: String) -> Result<String, String> {
+    let p = find_profile(&app, &id)?;
+    entry(&pp_key(&p.id))?
+        .get_password()
+        .map_err(|_| "Chưa có passphrase nào được lưu cho tài khoản này".to_string())
+}
+
 #[tauri::command]
 async fn delete_profile(app: tauri::AppHandle, id: String) -> Result<(), String> {
     let mut list = load_profiles(&app)?;
@@ -1674,6 +2005,9 @@ async fn delete_profile(app: tauri::AppHandle, id: String) -> Result<(), String>
     save_profiles(&app, &list)?;
 
     if let Ok(e) = entry(&id) {
+        let _ = e.delete_credential();
+    }
+    if let Ok(e) = entry(&pp_key(&id)) {
         let _ = e.delete_credential();
     }
     if p.auth == "token" && !p.login.is_empty() {
@@ -2125,7 +2459,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
-            user_home, get_stats, ssh_keygen, ssh_public_key, open_url, rules_list, rules_save, rules_delete, rules_sync, reveal_secret, reveal_password, list_hosts, save_host, delete_host, sftp_list, sftp_download, sftp_upload, sftp_mkdir, sftp_rename, sftp_remove, term_open, term_write, term_resize, term_close,
+            user_home, get_stats, reveal_passphrase, backup_export, backup_inspect, backup_import, ssh_keygen, ssh_public_key, open_url, rules_list, rules_save, rules_delete, rules_sync, reveal_secret, reveal_password, list_hosts, save_host, delete_host, sftp_list, sftp_download, sftp_upload, sftp_mkdir, sftp_rename, sftp_remove, term_open, term_write, term_resize, term_close,
             list_profiles,
             save_profile,
             delete_profile,

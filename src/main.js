@@ -53,6 +53,7 @@
     folder: '<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
     file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
     download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
+    archive: '<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
     chevron: '<path d="m6 9 6 6 6-6"/>',
   };
   const icon = (n, c = "") =>
@@ -80,6 +81,7 @@
   const PAGES = {
     accounts: { title: "Tài khoản", sub: "Chọn tài khoản để dùng ngay" },
     hosts: { title: "SSH host", sub: "Chọn tài khoản SSH để kết nối vào máy chủ ngay" },
+    backup: { title: "Kho lưu trữ", sub: "Sao lưu và khôi phục toàn bộ tài khoản khi đổi máy" },
     stats: { title: "Hiệu năng", sub: "RAM, CPU và tài nguyên mà app đang dùng" },
     settings: { title: "Cài đặt", sub: "Phiên bản, cập nhật và quyền riêng tư" },
     about: { title: "Giới thiệu", sub: "App này làm gì, chính sách dữ liệu và giấy phép" },
@@ -422,6 +424,93 @@
       await refresh();
     } catch (err) {
       toast(tr(err), "bad");
+    }
+  });
+
+  // ───────── kho lưu trữ (sao lưu / khôi phục) ─────────
+  const cfDlg = $("#cfDlg");
+  let cfDone = null;
+  const KIND_LABEL = { account: "Tài khoản", host: "SSH host", rule: "Quy tắc thư mục" };
+  function askConflicts(list) {
+    $("#cfSub").textContent = t("{n} mục trong file trùng mã với dữ liệu hiện có. Bạn muốn xử lý thế nào?", { n: list.length });
+    $("#cfList").innerHTML = list
+      .map((c) => `<div class="cf-row"><span class="cf-k">${esc(t(KIND_LABEL[c.kind] || c.kind))}</span><span>${esc(c.name)}</span></div>`)
+      .join("");
+    return new Promise((resolve) => {
+      cfDone = resolve;
+      cfDlg.showModal();
+    });
+  }
+  const cfClose = (v) => {
+    if (cfDone) cfDone(v);
+    cfDone = null;
+    if (cfDlg.open) cfDlg.close();
+  };
+  $("#cfOver").addEventListener("click", () => cfClose("over"));
+  $("#cfKeep").addEventListener("click", () => cfClose("keep"));
+  $("#cfCancel").addEventListener("click", () => cfClose("cancel"));
+  cfDlg.addEventListener("cancel", () => cfClose("cancel"));
+  const bk = { file: "" };
+  const bkMsg = (msg, bad) => {
+    const m = $("#bkMsg");
+    m.textContent = msg;
+    m.className = "bk-msg " + (bad ? "bad" : "ok");
+    m.hidden = !msg;
+  };
+  $("#bkExport").addEventListener("click", async () => {
+    const p1 = $("#bk_pass").value, p2 = $("#bk_pass2").value;
+    if (p1.length < 8) return bkMsg(t("Mật khẩu cần ít nhất 8 ký tự."), true);
+    if (p1 !== p2) return bkMsg(t("Hai lần nhập mật khẩu chưa khớp."), true);
+    const d = new Date();
+    const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const dest = await dialogApi.save({
+      defaultPath: `manager-account-${stamp}.macbackup`,
+      filters: [{ name: "Manager Account backup", extensions: ["macbackup"] }],
+    });
+    if (!dest) return;
+    try {
+      const r = await invoke("backup_export", { passphrase: p1, path: dest });
+      $("#bk_pass").value = "";
+      $("#bk_pass2").value = "";
+      bkMsg(t("Đã sao lưu {a} tài khoản, {h} SSH host, {r} quy tắc vào: {p}", { a: r.profiles, h: r.hosts, r: r.rules, p: dest }));
+    } catch (e) {
+      bkMsg(tr(e), true);
+    }
+  });
+  $("#rsPick").addEventListener("click", async () => {
+    const picked = await dialogApi.open({
+      multiple: false,
+      directory: false,
+      filters: [{ name: "Manager Account backup", extensions: ["macbackup"] }],
+    });
+    if (!picked) return;
+    bk.file = Array.isArray(picked) ? picked[0] : picked;
+    $("#rsFile").textContent = bk.file;
+  });
+  $("#rsGo").addEventListener("click", async () => {
+    if (!bk.file) return bkMsg(t("Hãy chọn file sao lưu trước."), true);
+    if (!$("#rs_pass").value) return bkMsg(t("Hãy nhập mật khẩu của file."), true);
+    $("#rsGo").disabled = true;
+    try {
+      const pass = $("#rs_pass").value;
+      const info = await invoke("backup_inspect", { passphrase: pass, path: bk.file });
+      let overwrite = true;
+      if (info.conflicts.length) {
+        const choice = await askConflicts(info.conflicts);
+        if (choice === "cancel") return bkMsg("");
+        overwrite = choice === "over";
+      }
+      const r = await invoke("backup_import", { passphrase: pass, path: bk.file, overwrite });
+      $("#rs_pass").value = "";
+      bkMsg(
+        t("Đã khôi phục {a} tài khoản, {h} SSH host, {r} quy tắc.", { a: r.profiles, h: r.hosts, r: r.rules }) +
+          (r.skipped ? " " + t("Bỏ qua {n} quy tắc trùng thư mục (giữ bản đang có).", { n: r.skipped }) : "")
+      );
+      await refresh();
+    } catch (e) {
+      bkMsg(tr(e), true);
+    } finally {
+      $("#rsGo").disabled = false;
     }
   });
 
@@ -1001,6 +1090,7 @@
     document.querySelectorAll("#nav .nav-item").forEach((b) => b.classList.toggle("active", b.dataset.page === S.page));
     $("#page-accounts").hidden = S.page !== "accounts";
     $("#page-hosts").hidden = S.page !== "hosts";
+    $("#page-backup").hidden = S.page !== "backup";
     $("#page-stats").hidden = S.page !== "stats";
     $("#page-settings").hidden = S.page !== "settings";
     if (S.page === "stats") { renderStats(); pollStats(); }
@@ -1168,6 +1258,14 @@
     $("#viewPass").textContent = t("Hiện");
     $("#viewPass").hidden = !(p && p.kind === "ssh" && p.has_token);
     $("#f_sshpass").placeholder = p?.kind === "ssh" && p.has_token ? t("Đã lưu — để trống nếu giữ nguyên") : t("Nhập mật khẩu của user này");
+    const hasPP = !!(p && p.kind === "ssh" && p.has_passphrase);
+    $("#f_sshpp").value = "";
+    $("#f_sshpp").type = "password";
+    $("#viewPP").textContent = t("Hiện");
+    $("#viewPP").hidden = !hasPP;
+    $("#clearPPBox").hidden = !hasPP;
+    $("#f_clearpp").checked = false;
+    $("#f_sshpp").placeholder = hasPP ? t("Đã lưu — để trống nếu giữ nguyên") : t("Chỉ cần nếu key của bạn có đặt passphrase");
     setKind(p ? p.kind || "git" : S.platform === "npm" ? "npm" : S.platform === "ssh" ? "ssh" : "git");
     dlg.showModal();
     $("#f_name").focus();
@@ -1217,6 +1315,21 @@
       if (!f.value) f.value = await invoke("reveal_password", { id: S.editId });
       f.type = "text";
       $("#viewPass").textContent = t("Ẩn");
+    } catch (e) {
+      toast(tr(e), "bad");
+    }
+  });
+  $("#viewPP").addEventListener("click", async () => {
+    const f = $("#f_sshpp");
+    if (f.type === "text") {
+      f.type = "password";
+      $("#viewPP").textContent = t("Hiện");
+      return;
+    }
+    try {
+      if (!f.value) f.value = await invoke("reveal_passphrase", { id: S.editId });
+      f.type = "text";
+      $("#viewPP").textContent = t("Ẩn");
     } catch (e) {
       toast(tr(e), "bad");
     }
@@ -1300,6 +1413,8 @@
     $("#f_token").type = "password";
     $("#f_sshpass").value = "";
     $("#f_sshpass").type = "password";
+    $("#f_sshpp").value = "";
+    $("#f_sshpp").type = "password";
   });
 
   async function submitForm(ev) {
@@ -1319,6 +1434,8 @@
         ssh_key_path: $("#f_keypath").value,
         ssh_private_key: $("#f_keytext").value,
         token: S.kind === "ssh" ? $("#f_sshpass").value : $("#f_token").value,
+        passphrase: S.kind === "ssh" ? $("#f_sshpp").value : "",
+        clear_passphrase: S.kind === "ssh" && $("#f_clearpp").checked,
         kind: S.kind,
         registry: $("#f_registry").value,
         scope: $("#f_scope").value,
