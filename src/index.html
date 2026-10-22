@@ -203,30 +203,31 @@
           <div>
             <h3>Manager Account</h3>
             <p id="aboutVer">Phiên bản —</p>
-            <p>Đổi nhanh giữa nhiều tài khoản Git chỉ với một cú bấm. Chạy trên macOS, Windows và Linux.</p>
+            <p>Quản lý tài khoản Git, npm và SSH, kết nối server và sao lưu mọi thứ ngay trên máy bạn. Chạy trên macOS, Windows và Linux.</p>
           </div>
           <button type="button" class="btn ghost" id="aboutRepo">Trang dự án trên GitHub</button>
         </div>
 
         <div class="set-card">
           <h3>App này làm gì?</h3>
-          <p class="lead">Nếu bạn dùng nhiều tài khoản GitHub, GitLab hay Bitbucket (cá nhân, công ty…), mỗi lần đổi qua lại thường phải sửa tên, email và đăng nhập lại thủ công. App gom tất cả vào một chỗ.</p>
+          <p class="lead">Nếu bạn làm việc với nhiều tài khoản (GitHub, GitLab, Bitbucket, npm registry, các server SSH), mỗi lần đổi qua lại thường phải sửa cấu hình và đăng nhập lại thủ công. App gom tất cả vào một chỗ.</p>
           <ul class="feat">
-            <li><b>Lưu nhiều tài khoản.</b> Mỗi tài khoản gồm <code>user.name</code>, <code>user.email</code> và cách đăng nhập: SSH key hoặc Personal Access Token.</li>
-            <li><b>Đổi tài khoản một cú bấm,</b> áp dụng cho toàn máy hoặc chỉ cho một repo. Tuỳ chọn tự đổi remote giữa SSH và HTTPS cho khớp.</li>
-            <li><b>Biết tài khoản nào đang hoạt động</b> trên từng nền tảng, lọc theo GitHub / GitLab / Bitbucket hoặc host khác.</li>
-            <li><b>Test kết nối</b> để chắc key hoặc token đang đăng nhập đúng tài khoản.</li>
+            <li><b>Tài khoản Git.</b> Lưu nhiều tài khoản (<code>user.name</code>, <code>user.email</code>, SSH key hoặc Personal Access Token) và đổi bằng một cú bấm, cho toàn máy hoặc chỉ một repo. <b>Quy tắc theo thư mục</b> tự dùng đúng tài khoản cho mọi repo trong một thư mục. Có thể <b>tạo SSH key ed25519</b> ngay trong app.</li>
+            <li><b>Tài khoản npm.</b> Lưu token cho npmjs, GitHub Packages hoặc registry riêng (theo scope), rồi ghi vào <code>.npmrc</code> khi bạn bấm dùng.</li>
+            <li><b>SSH host.</b> Kết nối server bằng terminal ngay trong app (nhiều tab), mật khẩu và passphrase của key được tự điền. Có thể <b>duyệt, tải lên, tải về, đổi tên và xoá file</b> trên server qua SSH.</li>
+            <li><b>Kho lưu trữ.</b> Sao lưu toàn bộ tài khoản, SSH host và quy tắc vào một file mã hoá bằng mật khẩu của bạn, rồi khôi phục khi đổi sang máy khác.</li>
+            <li><b>Hiệu năng.</b> Xem RAM, CPU và số phiên SSH mà chính app đang dùng.</li>
           </ul>
         </div>
 
         <div class="set-card">
-          <h3>App thay đổi gì trong git của bạn?</h3>
-          <p class="lead">App chỉ chạy lệnh <code>git config</code> bình thường và ghi các khoá sau, bạn có thể tự kiểm tra bất cứ lúc nào:</p>
+          <h3>App thay đổi gì trên máy của bạn?</h3>
+          <p class="lead">App chỉ làm những việc dưới đây, bạn có thể tự kiểm tra bất cứ lúc nào:</p>
           <ul class="feat">
-            <li><code>user.name</code>, <code>user.email</code>: danh tính trên commit.</li>
-            <li><code>core.sshCommand</code>: trỏ tới đúng SSH key (tài khoản dùng SSH).</li>
-            <li><code>credential.https://&lt;host&gt;.username</code> và nạp token vào <code>git credential</code> của hệ điều hành (tài khoản dùng token).</li>
-            <li><code>remote.&lt;tên&gt;.url</code>: chỉ khi bạn tick “Đổi remote SSH ⇄ HTTPS”.</li>
+            <li><code>git config</code> bình thường: <code>user.name</code>, <code>user.email</code>, <code>core.sshCommand</code> (trỏ tới đúng SSH key), <code>credential.https://&lt;host&gt;.username</code> cùng việc nạp token vào <code>git credential</code> của hệ điều hành, và <code>remote.&lt;tên&gt;.url</code> chỉ khi bạn tick “Đổi remote SSH ⇄ HTTPS”.</li>
+            <li><b>Quy tắc theo thư mục:</b> thêm các dòng <code>includeIf "gitdir:…"</code> vào <code>~/.gitconfig</code>, mỗi dòng trỏ tới một file cấu hình nhỏ trong thư mục dữ liệu của app. Xoá quy tắc thì các dòng này bị gỡ.</li>
+            <li><b>npm:</b> ghi token và <code>registry=</code> vào <code>~/.npmrc</code> hoặc <code>.npmrc</code> của repo, các dòng khác giữ nguyên.</li>
+            <li><b>SSH và quản lý file:</b> app chạy lệnh <code>ssh</code> có sẵn của hệ điều hành. Mật khẩu và passphrase được điền qua cơ chế <code>SSH_ASKPASS</code> (chính app đọc Keychain, không ghi ra file). Phần quản lý file chạy các lệnh <code>ls</code>, <code>cat</code>, <code>tar</code>, <code>mkdir</code>, <code>mv</code>, <code>rm</code> trên server bạn chọn qua kết nối SSH đó.</li>
           </ul>
         </div>
 
@@ -234,11 +235,13 @@
           <h3>Chính sách dữ liệu &amp; quyền riêng tư</h3>
           <ul class="feat">
             <li><b>Dữ liệu chỉ nằm trên máy bạn.</b> Không có server của app, không tài khoản người dùng, không thống kê, không quảng cáo, không bán hay chia sẻ dữ liệu cho bên thứ ba.</li>
-            <li><b>Nơi lưu:</b> thông tin tài khoản (tên, email, host, đường dẫn key) trong thư mục dữ liệu của app; <b>token trong kho bảo mật của hệ điều hành</b> (Keychain / Credential Manager / Secret Service), không ghi vào file thường; private key dán vào app lưu thành file riêng quyền 600.</li>
-            <li><b>Khi nào app dùng mạng:</b> (1) kiểm tra bản cập nhật, chỉ một yêu cầu đọc tới GitHub Releases của dự án, tắt được ở <i>Cài đặt</i>; (2) khi bạn bấm <i>Cập nhật ngay</i>, tải file cập nhật từ GitHub Releases của dự án; (3) khi bạn bấm <i>Test kết nối</i>, chỉ tới đúng nền tảng của tài khoản đó.</li>
-            <li><b>Không bao giờ gửi</b> tên, email, token, SSH key, danh sách tài khoản hay đường dẫn repo của bạn tới bất kỳ đâu.</li>
+            <li><b>Nơi lưu:</b> thông tin tài khoản, SSH host và quy tắc (tên, email, host, đường dẫn key…) nằm trong thư mục dữ liệu của app; <b>token, mật khẩu SSH và passphrase nằm trong kho bảo mật của hệ điều hành</b> (Keychain / Credential Manager / Secret Service), không ghi vào file thường; private key dán hoặc tạo trong app được lưu thành file riêng quyền 600.</li>
+            <li><b>Khi nào app dùng mạng:</b> (1) kiểm tra bản cập nhật, chỉ một yêu cầu đọc tới GitHub Releases của dự án, tắt được ở <i>Cài đặt</i>; (2) khi bạn bấm <i>Cập nhật ngay</i>, tải file cập nhật từ GitHub Releases của dự án; (3) khi bạn bấm <i>Test kết nối</i>, chỉ tới đúng nền tảng của tài khoản đó; (4) khi bạn mở terminal hoặc quản lý file của một SSH host, kết nối SSH tới chính máy chủ đó; (5) khi bạn bấm <i>Mở trang thêm key</i>, app chỉ mở trình duyệt tới trang SSH key của GitHub/GitLab, không gửi gì kèm theo.</li>
+            <li><b>Không bao giờ gửi</b> tên, email, token, mật khẩu, SSH key, danh sách tài khoản, danh sách SSH host hay đường dẫn repo của bạn tới bất kỳ đâu.</li>
+            <li><b>Kho lưu trữ:</b> file sao lưu chứa mọi bí mật của bạn, được mã hoá bằng mật khẩu bạn đặt (Argon2id và ChaCha20-Poly1305). App không giữ mật khẩu đó và không tự tải file lên đâu cả. Mất mật khẩu thì không thể mở lại file. Hãy cất file ở nơi an toàn.</li>
+            <li><b>Xác thực khi xem bí mật:</b> hiện token, mật khẩu, key, passphrase hoặc tạo file sao lưu sẽ hỏi Touch ID / mật khẩu máy (macOS), Windows Hello hoặc PIN (Windows), mật khẩu hệ thống (Linux). Tính năng bật mặc định và tắt được ở <i>Cài đặt</i>. Nó chặn người khác dùng ké lúc app đang mở, nhưng không ngăn được phần mềm khác chạy dưới tài khoản của bạn đọc trực tiếp kho bảo mật của hệ điều hành.</li>
             <li><b>Cập nhật:</b> app báo khi có bản mới; chỉ khi bạn bấm <i>Cập nhật ngay</i> app mới tải về. File cập nhật được kiểm tra chữ ký số (minisign) trước khi cài, file giả hoặc bị sửa sẽ bị từ chối.</li>
-            <li><b>Xoá dữ liệu:</b> xoá tài khoản trong app sẽ xoá token và key tương ứng. Muốn gỡ sạch, xoá thư mục dữ liệu của app (macOS: <code>~/Library/Application Support/com.nguyenthanhnam.manageraccount</code>; Windows: <code>%APPDATA%\com.nguyenthanhnam.manageraccount</code>; Linux: <code>~/.local/share/com.nguyenthanhnam.manageraccount</code>) và mục <code>manager-account</code> trong Keychain / Credential Manager.</li>
+            <li><b>Xoá dữ liệu:</b> xoá tài khoản trong app sẽ xoá token, mật khẩu, passphrase và key tương ứng. Muốn gỡ sạch, xoá thư mục dữ liệu của app (macOS: <code>~/Library/Application Support/com.nguyenthanhnam.manageraccount</code>; Windows: <code>%APPDATA%\com.nguyenthanhnam.manageraccount</code>; Linux: <code>~/.local/share/com.nguyenthanhnam.manageraccount</code>) và mục <code>manager-account</code> trong Keychain / Credential Manager, rồi xoá các dòng <code>includeIf</code> do app thêm trong <code>~/.gitconfig</code> nếu bạn đã dùng quy tắc theo thư mục.</li>
           </ul>
         </div>
 

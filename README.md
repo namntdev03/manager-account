@@ -1,8 +1,12 @@
 # Manager Account
 
-Ứng dụng desktop (Tauri v2) để **đổi nhanh giữa nhiều tài khoản Git** trên macOS, Windows và Linux.
-Mỗi tài khoản (profile) do bạn tự nhập một lần: `user.name`, `user.email` và cách đăng nhập
-(**SSH key** hoặc **Personal Access Token**). Sau đó chỉ cần bấm **“Dùng tài khoản này”**.
+Ứng dụng desktop (Tauri v2) để **quản lý tài khoản Git, npm và SSH**, kết nối server và sao lưu mọi thứ ngay trên máy bạn, chạy trên macOS, Windows và Linux.
+
+- **Tài khoản Git** (GitHub/GitLab/Bitbucket, SSH key hoặc token): đổi bằng một cú bấm, toàn máy hoặc một repo; **quy tắc theo thư mục** tự dùng đúng tài khoản; tạo SSH key ed25519 trong app.
+- **Tài khoản npm**: token cho npmjs, GitHub Packages hoặc registry riêng.
+- **SSH host**: terminal nhiều tab trong app, tự điền mật khẩu/passphrase, **quản lý file** trên server qua SSH.
+- **Kho lưu trữ**: sao lưu mọi thứ vào một file mã hoá bằng mật khẩu, khôi phục trên máy khác.
+- **Hiệu năng**, **xác thực** (Touch ID / Windows Hello / mật khẩu) trước khi xem bí mật, Tiếng Việt và English.
 
 ## App làm gì khi bấm “Dùng tài khoản này”
 
@@ -18,20 +22,29 @@ Mỗi tài khoản (profile) do bạn tự nhập một lần: `user.name`, `use
 - **Test kết nối**: SSH chạy `ssh -T git@<host>`; token gọi API `/user` của GitHub/GitLab để xem token thuộc tài khoản nào.
 - **npm registry**: lưu nhiều tài khoản npm (npmjs, GitHub Packages, registry riêng, có thể theo scope). Bấm dùng sẽ ghi token vào `~/.npmrc` (toàn máy) hoặc `.npmrc` của repo; token gốc vẫn nằm trong Keychain.
 - **SSH host**: lưu danh sách máy chủ (địa chỉ, port, ghi chú) và các **tài khoản SSH** (username + key, key tuỳ chọn) ở mục Tài khoản → SSH. Trong menu SSH host, chọn tài khoản ở ô **Kết nối bằng** rồi bấm **Kết nối**: một terminal mở ngay trong app (tab) và chạy `ssh`, có thể mở nhiều tab cùng lúc. Danh sách host lưu ở `hosts.json` trong thư mục dữ liệu của app, không gửi đi đâu.
+- **Quy tắc theo thư mục**: gắn một thư mục với một tài khoản Git; app thêm `includeIf "gitdir:<thư mục>/"` vào `~/.gitconfig` trỏ tới một file cấu hình nhỏ trong thư mục dữ liệu (`rules/`). Mọi repo trong thư mục đó tự dùng đúng tài khoản. Xoá quy tắc thì các dòng này được gỡ.
+- **Quản lý file trên SSH host**: duyệt, tải lên/xuống, tạo thư mục, đổi tên, xoá. Chạy qua `ssh` với các lệnh `ls`, `cat`, `tar`, `mkdir`, `mv`, `rm` (không dùng giao thức SFTP thật, nên không có phần trăm tiến độ).
+- **Tạo SSH key**: nút tạo key ed25519 (`ssh-keygen`) trong form tài khoản Git, có sao chép public key và mở trang thêm key của GitHub/GitLab. Key chỉ nằm trong form cho tới khi bạn bấm Lưu.
+- **Kho lưu trữ**: xuất tài khoản, bí mật, nội dung key, passphrase, SSH host và quy tắc ra file `.macbackup` mã hoá (Argon2id + ChaCha20-Poly1305). Khi khôi phục, dữ liệu được gộp vào dữ liệu hiện có; trùng mã thì hỏi bạn ghi đè hay giữ cả hai.
+- **Hiệu năng**: RAM, CPU và số phiên SSH mà chính app đang dùng.
 - **Ngôn ngữ**: Tiếng Việt và English (Cài đặt → Ngôn ngữ; mặc định theo ngôn ngữ hệ thống). Thêm ngôn ngữ mới: thêm một bảng trong `src/i18n.js`.
 
 ## Quyền riêng tư: dữ liệu chỉ nằm trên máy bạn
 
-- Không có server của app, không tài khoản, không thống kê. Tài khoản, token và cấu hình chỉ nằm trên máy.
+- Không có server của app, không tài khoản, không thống kê, không quảng cáo, không chia sẻ dữ liệu cho bên thứ ba.
+- Thông tin tài khoản, SSH host và quy tắc nằm trong thư mục dữ liệu của app; **token, mật khẩu SSH và passphrase nằm trong kho bảo mật của hệ điều hành** (Keychain / Credential Manager / Secret Service).
 - Giao diện, font và icon đều đóng gói sẵn trong app; cửa sổ app bị khoá bằng CSP, không tải gì từ internet.
-- App chỉ kết nối mạng trong **hai trường hợp**:
+- App chỉ kết nối mạng khi:
   1. **Kiểm tra bản cập nhật** (khi mở app, tắt được ở *Cài đặt*): một yêu cầu `GET` tới
-     `api.github.com/repos/namntdev03/manager-account/releases/latest`. **Không gửi** bất kỳ dữ liệu nào của bạn
-     (tên, email, token, key, danh sách tài khoản, đường dẫn repo). GitHub chỉ thấy IP như mọi lượt truy cập web.
-  2. **Khi bạn bấm “Test kết nối”** trên một tài khoản: SSH tới `git@<host>`, hoặc gọi API `/user` của GitHub/GitLab
-     để xác minh token. Chỉ tới đúng nền tảng của tài khoản đó.
-- Việc `git push/pull` do chính git thực hiện, không đi qua app.
-- App chỉ tải bản mới khi bạn bấm **Cập nhật ngay**: file lấy từ GitHub Releases của dự án và được kiểm tra chữ ký số (minisign) trước khi cài.
+     `api.github.com/repos/namntdev03/manager-account/releases/latest`, không gửi dữ liệu nào của bạn.
+  2. **Bạn bấm “Cập nhật ngay”**: tải file từ GitHub Releases của dự án, kiểm tra chữ ký số (minisign) trước khi cài.
+  3. **Bạn bấm “Test kết nối”**: SSH tới `git@<host>` hoặc gọi API `/user` của GitHub/GitLab, chỉ tới đúng nền tảng của tài khoản đó.
+  4. **Bạn mở terminal hoặc quản lý file của một SSH host**: kết nối SSH tới chính máy chủ đó.
+  5. **Bạn bấm “Mở trang thêm key”**: app mở trình duyệt tới trang SSH key của GitHub/GitLab, không gửi gì kèm theo.
+- App không bao giờ gửi tên, email, token, mật khẩu, key, danh sách tài khoản/host hay đường dẫn repo tới bất kỳ đâu.
+- `git push/pull` do chính git thực hiện, không đi qua app.
+- **Kho lưu trữ**: file sao lưu chứa mọi bí mật và được mã hoá bằng mật khẩu bạn đặt. App không giữ mật khẩu đó và không tự tải file đi đâu; mất mật khẩu thì không mở lại được file.
+- **Xác thực**: xem token/mật khẩu/key/passphrase hoặc tạo file sao lưu sẽ hỏi Touch ID / mật khẩu máy (macOS), Windows Hello/PIN (Windows), pkexec (Linux). Bật mặc định, tắt ở *Cài đặt*, nhớ 120 giây. Tính năng này chặn người khác dùng ké khi app đang mở, nhưng không ngăn phần mềm khác chạy dưới tài khoản của bạn đọc trực tiếp kho bảo mật của hệ điều hành.
 
 ## Cài trên macOS (bản tải từ Releases)
 
@@ -72,14 +85,16 @@ pnpm set:pubkey
 
 ## Bảo mật
 
-- Token nằm trong kho bảo mật của hệ điều hành (crate `keyring`), **không** ghi vào `profiles.json`.
-- `profiles.json` chỉ chứa thông tin không nhạy cảm (tên, email, đường dẫn key). Nó nằm trong thư mục dữ liệu của app:
+- Token, mật khẩu SSH và passphrase nằm trong kho bảo mật của hệ điều hành (crate `keyring`, service `manager-account`), **không** ghi vào `profiles.json`.
+- `profiles.json`, `hosts.json`, `rules.json` chỉ chứa thông tin không nhạy cảm (tên, email, host, đường dẫn key). Chúng nằm trong thư mục dữ liệu của app, cùng `security.json` (cài đặt xác thực) và `rules/`:
   - macOS: `~/Library/Application Support/com.nguyenthanhnam.manageraccount/`
   - Windows: `%APPDATA%\com.nguyenthanhnam.manageraccount\`
   - Linux: `~/.local/share/com.nguyenthanhnam.manageraccount/`
 - Private key dán vào app được lưu thành file riêng với quyền `600`.
 - Token khi test được đưa cho `curl` qua stdin, không hiện trong danh sách tiến trình.
-- Key có passphrase: nạp vào `ssh-agent` trước (`ssh-add <key>`), vì app chạy `ssh` ở chế độ không hỏi (BatchMode).
+- Mật khẩu SSH và passphrase của key được lưu trong kho bảo mật và điền tự động qua `SSH_ASKPASS` (chính file chạy của app đóng vai trò askpass, đọc kho bảo mật rồi trả lời cho `ssh`, không ghi ra file). Nếu chưa lưu thì `ssh` chạy ở chế độ không hỏi (BatchMode) cho phần quản lý file; lúc đó có thể nạp key vào `ssh-agent` (`ssh-add <key>`).
+- SSH dùng `StrictHostKeyChecking=accept-new`: lần đầu tự tin máy chủ mới, sau đó báo lỗi nếu khoá máy chủ đổi.
+- **Gỡ sạch dữ liệu**: xoá thư mục dữ liệu ở trên, mục `manager-account` trong Keychain / Credential Manager, và các dòng `includeIf` do app thêm trong `~/.gitconfig`.
 
 ## Yêu cầu để chạy / build
 
@@ -120,7 +135,7 @@ Mỗi hệ điều hành phải build trên chính hệ điều hành đó.
 
 ```
 src/               giao diện (HTML/CSS/JS thuần, không cần bundler)
-src-tauri/src/lib.rs   backend Rust: lưu profile, git config, keychain, test kết nối
+src-tauri/src/lib.rs   backend Rust: profile, git config, keychain, SSH/terminal, quản lý file, quy tắc, sao lưu, xác thực
 src-tauri/tauri.conf.json
 .github/workflows/build.yml
 ```
@@ -130,7 +145,7 @@ src-tauri/tauri.conf.json
 - Windows/macOS: app gọi `git`, `ssh`, `curl` có sẵn trên máy. Nếu thiếu `git`, app sẽ báo ngay trên giao diện.
 - Nếu máy chưa cấu hình `credential.helper`, app tự đặt mặc định: `osxkeychain` (macOS), `manager` (Windows),
   `libsecret` nếu có (Linux), nếu không có thì `store` (lưu file `~/.git-credentials`, không mã hoá).
-- Nếu bạn dùng `includeIf` trong `~/.gitconfig`, giá trị trong `includeIf` có thể ghi đè cấu hình toàn máy do app đặt.
+- Nếu bạn dùng `includeIf` trong `~/.gitconfig` (kể cả các dòng do *Quy tắc theo thư mục* thêm), giá trị trong `includeIf` sẽ ghi đè cấu hình toàn máy do app đặt, đúng với mục đích của quy tắc.
 
 ## Giấy phép
 
