@@ -45,6 +45,19 @@ brew_cask() { if [ "$HAS_BREW" = 1 ] && brew list --cask "$1" >/dev/null 2>&1; t
 port_has() { if [ "$HAS_PORT" = 1 ] && [ -n "$(port -q installed "$1" 2>/dev/null)" ]; then return 0; fi; return 1; }
 begin() { TOTAL="$1"; STEP=0; }
 step() { STEP=$((STEP+1)); echo "##P $STEP $TOTAL $1"; }
+KC=""
+kube_pick() {
+  command -v kubectl >/dev/null 2>&1 || { echo "Chưa có kubectl trên máy này. Hãy cài Kubernetes (hoặc kubectl) trước."; exit 1; }
+  if kubectl --request-timeout=8s get ns >/dev/null 2>&1; then KC="kubectl"
+  elif [ -r /etc/kubernetes/admin.conf ]; then KC="kubectl --kubeconfig /etc/kubernetes/admin.conf"
+  elif [ -f /etc/kubernetes/admin.conf ] && [ -n "$SUDO" ]; then KC="$SUDO kubectl --kubeconfig /etc/kubernetes/admin.conf"
+  else echo "Không kết nối được tới cluster Kubernetes nào (kubectl get ns thất bại)."; exit 1; fi
+  echo "Cluster đích: $($KC config current-context 2>/dev/null || echo admin.conf)"
+  echo "API server: $($KC config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null)"
+}
+linux_only() {
+  if [ "$PM" = brew ] || [ "$PM" = mac ]; then echo "$1 chỉ cài được trên Linux (máy này là macOS)."; exit 1; fi
+}
 confirm_del() {
   printf "ĐÂY LÀ XOÁ VĨNH VIỄN, không khôi phục được. Gõ XOA để tiếp tục: "
   read -r ans
@@ -506,6 +519,219 @@ echo "Đã gỡ Nginx và xoá cấu hình."
 echo "##P done"
 `;
 
+  const K8S = String.raw`KV="@VERSION@"
+linux_only "Kubernetes (kubeadm)"
+case "$KV" in [0-9]*.[0-9]*) ;; *) echo "Phiên bản không hợp lệ: $KV"; exit 1 ;; esac
+port_check 6443
+if command -v kubeadm >/dev/null 2>&1; then echo "Đã có kubeadm: $(kubeadm version -o short)"; fi
+if [ -f /etc/kubernetes/admin.conf ]; then echo "Máy này đã là node Kubernetes (/etc/kubernetes/admin.conf). Hãy gỡ cluster cũ trước."; exit 1; fi
+echo "Sẽ làm: tắt swap, nạp module kernel, cài containerd (nếu chưa có), cài kubelet/kubeadm/kubectl $KV từ pkgs.k8s.io,"
+echo "chạy kubeadm init (pod CIDR 192.168.0.0/16, hợp với Calico) và cho phép chạy workload trên node này."
+confirm
+$SUDO swapoff -a
+$SUDO sed -i '/ swap / s/^/#/' /etc/fstab
+printf "overlay\nbr_netfilter\n" | $SUDO tee /etc/modules-load.d/k8s.conf >/dev/null
+$SUDO modprobe overlay
+$SUDO modprobe br_netfilter
+printf "net.bridge.bridge-nf-call-iptables=1\nnet.bridge.bridge-nf-call-ip6tables=1\nnet.ipv4.ip_forward=1\n" | $SUDO tee /etc/sysctl.d/99-k8s.conf >/dev/null
+$SUDO sysctl --system >/dev/null
+case "$PM" in
+  apt)
+    $SUDO apt-get update
+    $SUDO apt-get install -y apt-transport-https ca-certificates curl gpg
+    if ! command -v containerd >/dev/null 2>&1; then $SUDO apt-get install -y containerd; fi
+    $SUDO mkdir -p /etc/apt/keyrings
+    curl -fsSL "https://pkgs.k8s.io/core:/stable:/v$KV/deb/Release.key" | $SUDO gpg --dearmor --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v$KV/deb/ /" | $SUDO tee /etc/apt/sources.list.d/kubernetes.list >/dev/null
+    $SUDO apt-get update
+    $SUDO apt-get install -y kubelet kubeadm kubectl
+    $SUDO apt-mark hold kubelet kubeadm kubectl
+    ;;
+  dnf|yum)
+    command -v containerd >/dev/null 2>&1 || { echo "Cần containerd trước (cài Docker bằng menu này sẽ có sẵn containerd)."; exit 1; }
+    printf "[kubernetes]\nname=Kubernetes\nbaseurl=https://pkgs.k8s.io/core:/stable:/v%s/rpm/\nenabled=1\ngpgcheck=1\ngpgkey=https://pkgs.k8s.io/core:/stable:/v%s/rpm/repodata/repomd.xml.key\nexclude=kubelet kubeadm kubectl cri-tools kubernetes-cni\n" "$KV" "$KV" | $SUDO tee /etc/yum.repos.d/kubernetes.repo >/dev/null
+    $SUDO $PM install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+    ;;
+esac
+if [ -f /etc/containerd/config.toml ]; then $SUDO cp /etc/containerd/config.toml "/etc/containerd/config.toml.bak-$(date +%s)"; fi
+$SUDO mkdir -p /etc/containerd
+containerd config default | $SUDO tee /etc/containerd/config.toml >/dev/null
+$SUDO sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+$SUDO systemctl enable --now containerd
+$SUDO systemctl restart containerd
+$SUDO systemctl enable --now kubelet
+echo "=== kubeadm init ==="
+$SUDO kubeadm init --pod-network-cidr=192.168.0.0/16
+mkdir -p "$HOME/.kube"
+if [ -e "$HOME/.kube/config" ]; then
+  $SUDO cp /etc/kubernetes/admin.conf "$HOME/.kube/config.kubeadm"
+  $SUDO chown "$(id -u):$(id -g)" "$HOME/.kube/config.kubeadm"
+  echo "Đã có ~/.kube/config nên KHÔNG ghi đè. kubeconfig của cluster mới nằm ở ~/.kube/config.kubeadm"
+else
+  $SUDO cp /etc/kubernetes/admin.conf "$HOME/.kube/config"
+  $SUDO chown "$(id -u):$(id -g)" "$HOME/.kube/config"
+fi
+$SUDO kubectl --kubeconfig /etc/kubernetes/admin.conf taint nodes --all node-role.kubernetes.io/control-plane- || true
+echo "Hoàn tất cài Kubernetes $KV. Node sẽ ở trạng thái NotReady cho tới khi cài CNI (hãy cài Calico)."
+echo "Lưu ý bảo mật: giới hạn cổng 6443 (API server) bằng firewall, chỉ cho IP tin cậy truy cập."
+`;
+
+  const K8S_UN = String.raw`linux_only "Kubernetes (kubeadm)"
+echo "=== Gỡ Kubernetes và xoá sạch cluster ==="
+echo "Sẽ xoá toàn bộ cluster trên máy này (workload, etcd, chứng chỉ, cấu hình):"
+show_path /etc/kubernetes
+show_path /var/lib/kubelet
+show_path /var/lib/etcd
+show_path /etc/cni/net.d
+show_path /opt/cni
+begin 3
+step "Đặt lại cluster (kubeadm reset)"
+if command -v kubeadm >/dev/null 2>&1; then $SUDO kubeadm reset -f || true; fi
+step "Gỡ kubelet, kubeadm, kubectl"
+case "$PM" in
+  apt)
+    $SUDO apt-mark unhold kubelet kubeadm kubectl 2>/dev/null || true
+    PK="$(dpkg -l | awk '/^ii/ {print $2}' | grep -E '^(kubelet|kubeadm|kubectl|kubernetes-cni|cri-tools)$' || true)"
+    if [ -n "$PK" ]; then $SUDO apt-get purge -y $PK; fi
+    ;;
+  dnf|yum)
+    PK="$(rpm -qa --qf '%{NAME}\n' | grep -E '^(kubelet|kubeadm|kubectl|kubernetes-cni|cri-tools)$' || true)"
+    if [ -n "$PK" ]; then $SUDO $PM remove -y $PK; fi
+    ;;
+esac
+step "Xoá dữ liệu, cấu hình và repo"
+rmp /etc/kubernetes /var/lib/kubelet /var/lib/etcd /etc/cni/net.d /var/lib/cni /opt/cni /etc/sysctl.d/99-k8s.conf /etc/modules-load.d/k8s.conf /etc/apt/sources.list.d/kubernetes.list /etc/apt/keyrings/kubernetes-apt-keyring.gpg /etc/yum.repos.d/kubernetes.repo
+echo "Đã gỡ Kubernetes. Giữ lại: ~/.kube (có thể chứa cluster khác), containerd, và các luật iptables còn sót (sẽ mất sau khi khởi động lại máy)."
+echo "##P done"
+`;
+
+  const CALICO = String.raw`CV="@VERSION@"
+case "$CV" in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "Phiên bản không hợp lệ: $CV"; exit 1 ;; esac
+kube_pick
+if $KC -n kube-system get ds calico-node >/dev/null 2>&1; then echo "Cluster này đã có Calico (calico-node)."; fi
+URL="https://raw.githubusercontent.com/projectcalico/calico/v$CV/manifests/calico.yaml"
+echo "Sẽ chạy: kubectl apply -f $URL"
+echo "Calico là plugin mạng (CNI) của cả cluster; hãy chắc chắn cluster đích ở trên là đúng."
+confirm
+$KC apply -f "$URL"
+echo "Chờ calico-node sẵn sàng (tối đa 5 phút)..."
+$KC -n kube-system rollout status ds/calico-node --timeout=300s || echo "calico-node chưa sẵn sàng; kiểm tra: kubectl -n kube-system get pods"
+$KC get nodes
+echo "Hoàn tất cài Calico $CV."
+`;
+
+  const CALICO_UN = String.raw`echo "=== Gỡ Calico khỏi cluster ==="
+kube_pick
+CV="$($KC -n kube-system get ds calico-node -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null | sed -n 's/.*:v\([0-9][0-9.]*\)$/\1/p' || true)"
+if [ -z "$CV" ]; then echo "Không thấy Calico (calico-node) trong cluster này."; else echo "Calico đang chạy: v$CV"; fi
+echo "Pod sẽ MẤT mạng cho tới khi có CNI khác."
+show_path /etc/cni/net.d/10-calico.conflist
+show_path /var/lib/calico
+begin 2
+step "Xoá Calico khỏi cluster"
+if [ -n "$CV" ]; then $KC delete -f "https://raw.githubusercontent.com/projectcalico/calico/v$CV/manifests/calico.yaml" --ignore-not-found --timeout=180s || true; fi
+step "Dọn cấu hình CNI trên máy này"
+rmp /etc/cni/net.d/10-calico.conflist /etc/cni/net.d/calico-kubeconfig /var/lib/calico /var/run/calico
+echo "Đã gỡ Calico."
+echo "##P done"
+`;
+
+  const ARGOCD = String.raw`AV="@VERSION@"
+case "$AV" in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "Phiên bản không hợp lệ: $AV"; exit 1 ;; esac
+kube_pick
+if $KC -n argocd get deploy argocd-server >/dev/null 2>&1; then echo "Cluster này đã có ArgoCD (namespace argocd)."; fi
+URL="https://raw.githubusercontent.com/argoproj/argo-cd/v$AV/manifests/install.yaml"
+echo "Sẽ tạo namespace argocd và chạy: kubectl apply -n argocd --server-side -f $URL"
+echo "Không mở cổng ra ngoài: giữ ClusterIP, truy cập bằng port-forward hoặc SSH tunnel."
+confirm
+$KC create namespace argocd --dry-run=client -o yaml | $KC apply -f -
+$KC apply -n argocd --server-side --force-conflicts -f "$URL"
+echo "Chờ argocd-server sẵn sàng (tối đa 5 phút)..."
+$KC -n argocd rollout status deployment/argocd-server --timeout=300s || echo "argocd-server chưa sẵn sàng; kiểm tra: kubectl -n argocd get pods"
+echo "Hoàn tất cài ArgoCD $AV."
+echo "Truy cập an toàn: kubectl -n argocd port-forward svc/argocd-server 8080:443  rồi mở https://localhost:8080"
+echo "Mật khẩu admin ban đầu: kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
+echo "Sau khi đăng nhập hãy đổi mật khẩu và xoá secret argocd-initial-admin-secret."
+`;
+
+  const ARGOCD_UN = String.raw`echo "=== Gỡ ArgoCD khỏi cluster ==="
+kube_pick
+AV="$($KC -n argocd get deploy argocd-server -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null | sed -n 's/.*:v\([0-9][0-9.]*\)$/\1/p' || true)"
+if [ -z "$AV" ]; then echo "Không thấy argocd-server trong namespace argocd."; else echo "ArgoCD đang chạy: v$AV"; fi
+echo "Các Application: $($KC get applications.argoproj.io -A --no-headers 2>/dev/null | wc -l | tr -d ' ')"
+echo "Workload ArgoCD đã triển khai sẽ được GIỮ LẠI (script gỡ finalizer của Application trước khi xoá)."
+begin 3
+step "Giữ lại workload: gỡ finalizer của Application"
+$KC get applications.argoproj.io -A --no-headers -o custom-columns=NS:.metadata.namespace,N:.metadata.name 2>/dev/null | while read -r ns n; do
+  if [ -n "$n" ]; then $KC -n "$ns" patch applications.argoproj.io "$n" --type merge -p '{"metadata":{"finalizers":null}}' || true; fi
+done
+step "Xoá ArgoCD"
+if [ -n "$AV" ]; then $KC delete -n argocd -f "https://raw.githubusercontent.com/argoproj/argo-cd/v$AV/manifests/install.yaml" --ignore-not-found --timeout=180s || true; fi
+step "Xoá namespace và CRD"
+$KC delete crd applications.argoproj.io applicationsets.argoproj.io appprojects.argoproj.io --ignore-not-found --timeout=120s || true
+$KC delete namespace argocd --ignore-not-found --timeout=180s || true
+echo "Đã gỡ ArgoCD."
+echo "##P done"
+`;
+
+  const HARBOR = String.raw`HV="@VERSION@"
+HH="@HOST@"
+HP="@PORT@"
+linux_only "Harbor"
+case "$HV" in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "Phiên bản không hợp lệ: $HV"; exit 1 ;; esac
+echo "$HH" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$' || { echo "Tên miền/IP không hợp lệ."; exit 1; }
+case "$HP" in ""|*[!0-9]*) echo "Cổng không hợp lệ."; exit 1 ;; esac
+command -v docker >/dev/null 2>&1 || { echo "Cần cài Docker trước (menu Deployment, ứng dụng Docker)."; exit 1; }
+docker compose version >/dev/null 2>&1 || { echo "Cần Docker Compose plugin (có sẵn khi cài Docker bằng menu này)."; exit 1; }
+if [ -e /opt/harbor ]; then echo "Đã có /opt/harbor. Hãy gỡ Harbor cũ trước khi cài lại."; exit 1; fi
+port_check "$HP"
+echo "Sẽ cài Harbor $HV vào /opt/harbor (bộ cài online từ github.com/goharbor/harbor), hostname $HH, cổng HTTP $HP."
+echo "Mặc định chỉ HTTP, không TLS: hãy đặt reverse proxy HTTPS phía trước, và dùng firewall giới hạn cổng $HP."
+confirm
+W="$(mktemp -d)"
+curl -fsSL "https://github.com/goharbor/harbor/releases/download/v$HV/harbor-online-installer-v$HV.tgz" -o "$W/harbor.tgz"
+$SUDO mkdir -p /opt
+$SUDO tar -xzf "$W/harbor.tgz" -C /opt
+rm -rf "$W"
+cd /opt/harbor
+PW="$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 20)"
+$SUDO cp harbor.yml.tmpl harbor.yml
+$SUDO sed -i -e "s/^hostname:.*/hostname: $HH/" -e "s/^  port: 80\$/  port: $HP/" -e "s/^harbor_admin_password:.*/harbor_admin_password: $PW/" harbor.yml
+$SUDO sed -i '/^https:/,/^  private_key:/ s/^/# /' harbor.yml
+$SUDO chmod 600 harbor.yml
+$SUDO ./install.sh
+echo "$HV" | $SUDO tee /opt/harbor/.version >/dev/null
+echo "Hoàn tất cài Harbor $HV."
+echo "Địa chỉ: http://$HH:$HP   Tài khoản: admin   Mật khẩu: $PW"
+echo "HÃY LƯU mật khẩu này ngay và đổi sau khi đăng nhập (cũng nằm trong /opt/harbor/harbor.yml, chỉ root đọc được)."
+`;
+
+  const HARBOR_UN = String.raw`linux_only "Harbor"
+echo "=== Gỡ Harbor và xoá sạch dữ liệu ==="
+DK="docker"
+if command -v docker >/dev/null 2>&1 && ! docker info >/dev/null 2>&1; then DK="$SUDO docker"; fi
+DV=""
+if [ -f /opt/harbor/harbor.yml ]; then DV="$($SUDO awk '/^data_volume:/ {print $2}' /opt/harbor/harbor.yml)"; fi
+case "$DV" in /?*) ;; *) DV=/data ;; esac
+echo "Sẽ xoá MỌI image/artifact đang lưu trong Harbor:"
+show_path /opt/harbor
+for d in database registry redis secret job_logs trivy-adapter ca_download cert scandata_exports; do show_path "$DV/$d"; done
+begin 3
+step "Dừng và xoá container Harbor"
+if [ -f /opt/harbor/docker-compose.yml ]; then (cd /opt/harbor && $DK compose down -v) || true; fi
+step "Xoá image Harbor"
+IMGS=""
+if command -v docker >/dev/null 2>&1; then IMGS="$($DK images --format '{{.Repository}}:{{.Tag}}' | grep '^goharbor/' || true)"; fi
+if [ -n "$IMGS" ]; then $DK rmi -f $IMGS || true; fi
+step "Xoá dữ liệu và thư mục cài"
+for d in database registry redis secret job_logs trivy-adapter ca_download cert scandata_exports; do rmp "$DV/$d"; done
+rmp /opt/harbor
+$SUDO rmdir "$DV" 2>/dev/null || true
+echo "Đã gỡ Harbor và xoá dữ liệu."
+echo "##P done"
+`;
+
+
   const APPS = [
     {
       id: "docker", name: "Docker", logo: "docker", os: OS,
@@ -536,23 +762,51 @@ echo "##P done"
       versions: [{ v: "stable", label: "stable" }, { v: "mainline", label: "mainline" }],
       script: NGINX, uninstall: NGINX_UN,
     },
+    {
+      id: "k8s", name: "Kubernetes", logo: "k8s", os: "Debian/Ubuntu, RHEL/Rocky/Alma (Linux)",
+      desc: "Cluster 1 node bằng kubeadm + containerd (repo pkgs.k8s.io)",
+      versions: [{ v: "1.37", label: "1.37" }, { v: "1.36", label: "1.36" }, { v: "1.35", label: "1.35" }, { v: "1.34", label: "1.34" }],
+      script: K8S, uninstall: K8S_UN,
+    },
+    {
+      id: "calico", name: "Calico", logo: "calico", os: "Cluster Kubernetes",
+      desc: "Plugin mạng (CNI) cho cluster, cài bằng manifest chính thức",
+      versions: [{ v: "3.33.0", label: "3.33.0" }, { v: "3.32.2", label: "3.32.2" }, { v: "3.31.7", label: "3.31.7" }, { v: "3.30.7", label: "3.30.7" }],
+      script: CALICO, uninstall: CALICO_UN,
+    },
+    {
+      id: "argocd", name: "ArgoCD", logo: "argocd", os: "Cluster Kubernetes",
+      desc: "GitOps cho Kubernetes, giữ ClusterIP (truy cập bằng port-forward)",
+      versions: [{ v: "3.5.6", label: "3.5.6" }, { v: "3.4.12", label: "3.4.12" }, { v: "3.3.17", label: "3.3.17" }],
+      script: ARGOCD, uninstall: ARGOCD_UN,
+    },
+    {
+      id: "harbor", name: "Harbor", logo: "harbor", os: "Linux có Docker",
+      desc: "Registry cho image container (docker compose, mật khẩu admin tự sinh)",
+      versions: [{ v: "2.15.4", label: "2.15.4" }, { v: "2.14.5", label: "2.14.5" }, { v: "2.13.6", label: "2.13.6" }],
+      params: [
+        { id: "HOST", label: "Tên miền hoặc IP để truy cập Harbor", ph: "harbor.example.com", re: "^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$" },
+        { id: "PORT", label: "Cổng HTTP", ph: "8080", def: "8080", re: "^[0-9]{2,5}$" },
+      ],
+      script: HARBOR, uninstall: HARBOR_UN,
+    },
   ];
-  // Sắp có: cần thiết kế riêng vì nhiều bước và rủi ro cao hơn
-  const SOON = [
-    { id: "k8s", name: "Kubernetes", logo: "k8s" },
-    { id: "calico", name: "Calico", logo: "" },
-    { id: "argocd", name: "ArgoCD", logo: "argocd" },
-    { id: "harbor", name: "Harbor", logo: "harbor" },
-  ];
+  // Hiện không còn ứng dụng "Sắp có"
+  const SOON = [];
 
   window.DEPLOY = {
     APPS,
     SOON,
-    script(appId, version, method, mode) {
+    script(appId, version, method, mode, params) {
       const a = APPS.find((x) => x.id === appId);
       if (!a) return "";
       if (mode === "uninstall") return PRE + a.uninstall;
-      return PRE + a.script.split("@METHOD@").join(method || "").split("@VERSION@").join(version || "");
+      let body = a.script.split("@METHOD@").join(method || "").split("@VERSION@").join(version || "");
+      (a.params || []).forEach((q) => {
+        const v = (params && params[q.id]) || q.def || "";
+        body = body.split("@" + q.id + "@").join(v);
+      });
+      return PRE + body;
     },
   };
 })();

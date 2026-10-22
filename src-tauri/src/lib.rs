@@ -1848,6 +1848,14 @@ echo "docker=$(v docker --version)"
 echo "postgres=$(v psql --version)"
 echo "redis=$(v redis-server --version)"
 echo "nginx=$(v nginx -v)"
+echo "k8s=$(v kubeadm version -o short)"
+if command -v kubectl >/dev/null 2>&1; then
+  echo "calico=$(kubectl --request-timeout=5s -n kube-system get ds calico-node -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null | head -1)"
+  echo "argocd=$(kubectl --request-timeout=5s -n argocd get deploy argocd-server -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null | head -1)"
+fi
+if command -v docker >/dev/null 2>&1; then
+  echo "harbor=$(docker ps --format '{{.Image}}' 2>/dev/null | grep 'harbor-core' | head -1)"
+fi
 echo "via_docker=$(via docker)"
 echo "via_postgres=$(via psql)"
 echo "via_redis=$(via redis-server)"
@@ -2025,6 +2033,46 @@ fn ver_nginx() -> Result<Vec<serde_json::Value>, String> {
     }
 }
 
+/// Phiên bản phát hành (không phải bản thử) của một repo GitHub. `minor_only`: trả về nhánh `X.Y` (dùng cho repo gói Kubernetes).
+fn ver_github(repo: &str, minor_only: bool, top: usize) -> Result<Vec<serde_json::Value>, String> {
+    let body = http_get(&format!("https://api.github.com/repos/{repo}/releases?per_page=100"))?;
+    let v: serde_json::Value = serde_json::from_str(&body).map_err(|_| "Phản hồi GitHub không đúng định dạng".to_string())?;
+    let arr = v.as_array().ok_or("GitHub từ chối hoặc giới hạn tần suất truy vấn")?;
+    let mut vs: Vec<String> = arr
+        .iter()
+        .filter(|e| e["prerelease"].as_bool() != Some(true) && e["draft"].as_bool() != Some(true))
+        .filter_map(|e| e["tag_name"].as_str())
+        .map(|s| s.strip_prefix('v').unwrap_or(s))
+        .filter(|s| {
+            let p: Vec<&str> = s.split('.').collect();
+            p.len() == 3 && p.iter().all(|x| !x.is_empty() && x.chars().all(|c| c.is_ascii_digit()))
+        })
+        .map(str::to_string)
+        .collect();
+    vs.sort_by(|a, b| vkey(b).cmp(&vkey(a)));
+    let mut out = vec![];
+    let mut lines: Vec<(u32, u32)> = vec![];
+    for v in vs {
+        let k = vkey(&v);
+        if lines.contains(&(k.0, k.1)) {
+            continue;
+        }
+        lines.push((k.0, k.1));
+        if minor_only {
+            out.push(ver_item(&format!("{}.{}", k.0, k.1), &format!("{}.{} · {}", k.0, k.1, v)));
+        } else {
+            out.push(ver_item(&v, &v));
+        }
+        if lines.len() >= top {
+            break;
+        }
+    }
+    if out.is_empty() {
+        return Err(format!("Không đọc được danh sách phiên bản của {repo}"));
+    }
+    Ok(out)
+}
+
 /// Lấy danh sách phiên bản đang phát hành của từng ứng dụng trực tiếp từ nguồn chính thức.
 /// Ứng dụng nào lỗi thì có mặt trong `errors`, giao diện sẽ dùng danh sách dự phòng cho ứng dụng đó.
 #[tauri::command]
@@ -2035,6 +2083,10 @@ async fn deploy_versions() -> Result<serde_json::Value, String> {
             ("postgres", std::thread::spawn(ver_postgres)),
             ("redis", std::thread::spawn(ver_redis)),
             ("nginx", std::thread::spawn(ver_nginx)),
+            ("k8s", std::thread::spawn(|| ver_github("kubernetes/kubernetes", true, 4))),
+            ("calico", std::thread::spawn(|| ver_github("projectcalico/calico", false, 4))),
+            ("argocd", std::thread::spawn(|| ver_github("argoproj/argo-cd", false, 4))),
+            ("harbor", std::thread::spawn(|| ver_github("goharbor/harbor", false, 4))),
         ];
         let mut versions = serde_json::Map::new();
         let mut errors = serde_json::Map::new();
