@@ -180,7 +180,7 @@ echo "Hoàn tất cài Nginx."
     {
       id: "redis", name: "Redis", logo: "redis", os: OS,
       desc: "Redis từ repo chính thức packages.redis.io (dùng cho cache, queue)",
-      versions: [{ v: "", label: "Mới nhất" }, { v: "7.4", label: "7.4.x" }, { v: "7.2", label: "7.2.x" }],
+      versions: [{ v: "", label: "Mới nhất" }, { v: "8.0", label: "8.0.x" }, { v: "7.4", label: "7.4.x" }, { v: "7.2", label: "7.2.x" }],
       script: REDIS,
     },
     {
