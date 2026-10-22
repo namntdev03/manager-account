@@ -912,7 +912,7 @@
 
   const hostDlg = $("#hostDlg");
   // ───────── Deployment: cài ứng dụng lên máy này hoặc một SSH host ─────────
-  const dep = { app: null, ver: "", method: "brew", term: null, fit: null, id: null, ended: false };
+  const dep = { app: null, ver: "", method: "brew", mode: "install", term: null, fit: null, id: null, ended: false };
   const depTarget = () => $('[data-sel="dep_target"]').dataset.value || "";
   const depAcc = () => $('[data-sel="dep_acc"]').dataset.value || "";
   const depHost = () => S.hosts.find((h) => h.id === depTarget());
@@ -1036,9 +1036,10 @@
   }
   // Máy đích là macOS (Homebrew)? Khi đó Redis có thêm lựa chọn biên dịch từ mã nguồn.
   const depMac = () => depSt.pm === "brew";
-  const depHasMethod = () => depMac() && dep.app && dep.app.id === "redis";
+  const depHasMethod = () => dep.mode !== "uninstall" && depMac() && dep.app && dep.app.id === "redis";
   // Có danh sách phiên bản để chọn không?
   function depVerVisible() {
+    if (dep.mode === "uninstall") return false;
     if (!depMac()) return true;
     const id = dep.app.id;
     if (id === "postgres") return true;
@@ -1049,6 +1050,13 @@
   // Ghi chú dưới ô chọn: { txt, warn }
   function depPinWarn() {
     const pm = depSt.pm, id = dep.app.id, v = dep.ver;
+    if (dep.mode === "uninstall") {
+      return { txt: id === "postgres"
+        ? t("Gỡ cài đặt sẽ xoá vĩnh viễn PostgreSQL (mọi phiên bản) cùng TOÀN BỘ cơ sở dữ liệu và cấu hình trên máy này. Không khôi phục được, hãy sao lưu trước.")
+        : id === "docker"
+          ? t("Gỡ cài đặt sẽ xoá vĩnh viễn Docker cùng TOÀN BỘ container, image, volume và cấu hình trên máy này. Không khôi phục được, hãy sao lưu trước.")
+          : t("Gỡ cài đặt sẽ xoá vĩnh viễn {n} cùng dữ liệu và cấu hình của nó trên máy này. Không khôi phục được, hãy sao lưu trước.", { n: dep.app.name }), warn: true };
+    }
     if (!pm) return { txt: "", warn: false };
     if (depMac()) {
       if (id === "redis") return { txt: dep.method === "source" ? t("Biên dịch từ mã nguồn cần Xcode Command Line Tools, mất vài phút và cài vào thư mục riêng ~/.local/redis (không đụng bản Homebrew).") : t("Homebrew chỉ cài bản mới nhất nên không có danh sách phiên bản. Muốn chọn phiên bản, hãy chọn “Biên dịch từ mã nguồn”."), warn: false };
@@ -1066,33 +1074,65 @@
     $("#depMethodLbl").hidden = !depHasMethod();
     $("#depVerLbl").hidden = !depVerVisible();
     $("#depVerNote").hidden = !depVerVisible();
+    depSyncMode();
     $("#depMethod").innerHTML = [["brew", "Homebrew (bản mới nhất, nhanh)"], ["source", "Biên dịch từ mã nguồn (chọn được phiên bản)"]]
       .map(([k, l]) => `<button type="button" data-m="${k}" class="${dep.method === k ? "on" : ""}">${esc(t(l))}</button>`).join("");
-    $("#depScript").value = DEPLOY.script(dep.app.id, depEffVer(), depHasMethod() ? dep.method : "");
+    $("#depScript").value = DEPLOY.script(dep.app.id, depEffVer(), depHasMethod() ? dep.method : "", dep.mode);
     document.querySelectorAll("#depVer button").forEach((b) => b.classList.toggle("on", b.dataset.v === dep.ver));
   }
-  function depCheckConfirm() {
+  // tên cần gõ để xác nhận: server (nếu cài lên server), hoặc tên ứng dụng khi gỡ trên máy này
+  function depNeedName() {
     const h = depHost();
-    $("#depGo").disabled = !!h && $("#depConfirm").value.trim() !== h.name;
+    if (h) return h.name;
+    return dep.mode === "uninstall" ? dep.app.name : "";
+  }
+  function depCheckConfirm() {
+    const need = depNeedName();
+    const typed = $("#depConfirm").value.trim();
+    $("#depGo").disabled = !!need && (depHost() ? typed !== need : typed.toLowerCase() !== need.toLowerCase());
+  }
+  function depSyncMode() {
+    const un = dep.mode === "uninstall";
+    const h = depHost();
+    $("#depTitle").textContent = t(un ? "Gỡ {n}" : "Cài {n}", { n: dep.app.name });
+    $("#depGo").textContent = t(un ? "Gỡ và xoá sạch" : "Bắt đầu cài");
+    $("#depGo").classList.toggle("danger", un);
+    $("#depMode").innerHTML = [["install", "Cài mới / nâng cấp"], ["uninstall", "Gỡ cài đặt (xoá sạch)"]]
+      .map(([k, l]) => `<button type="button" data-md="${k}" class="${dep.mode === k ? "on" : ""}">${esc(t(l))}</button>`).join("");
+    const need = depNeedName();
+    $("#depConfirmLbl").hidden = !need;
+    $("#depConfirmTxt").textContent = h
+      ? t(un ? "Gõ tên server “{h}” để xác nhận XOÁ SẠCH" : "Gõ tên server “{h}” để xác nhận", { h: h.name })
+      : need ? t("Gõ “{h}” để xác nhận xoá sạch", { h: need }) : "";
+    const cur = depSt.ver[dep.app.id];
+    $("#depInstalled").hidden = false;
+    if (un) $("#depInstalled").textContent = cur
+      ? t("Đang cài {n} phiên bản {v}.", { n: dep.app.name, v: cur })
+      : t("Chưa phát hiện {n} trên máy này; script vẫn dọn các thư mục còn sót.", { n: dep.app.name });
+    else if (cur) $("#depInstalled").textContent = t("Máy này đã cài {n} phiên bản {v}. Cài tiếp có thể nâng cấp hoặc ghi đè cấu hình repo.", { n: dep.app.name, v: cur });
+    else $("#depInstalled").hidden = true;
+    depCheckConfirm();
   }
   function openDepDlg(appId) {
     dep.app = DEPLOY.APPS.find((x) => x.id === appId);
     const h = depHost();
-    $("#depTitle").textContent = t("Cài {n}", { n: dep.app.name });
     $("#depSub").textContent = h ? t("Lên server {h}", { h: `${h.name} (${h.address})` }) : t("Lên máy này (local)");
     dep.method = "brew";
+    dep.mode = "install";
     depRenderVersions(false);
     $("#depConfirm").value = "";
-    $("#depConfirmLbl").hidden = !h;
-    if (h) $("#depConfirmTxt").textContent = t("Gõ tên server “{h}” để xác nhận", { h: h.name });
     $("#depErr").hidden = true;
-    const cur = depSt.ver[dep.app.id];
-    $("#depInstalled").hidden = !cur;
-    if (cur) $("#depInstalled").textContent = t("Máy này đã cài {n} phiên bản {v}. Cài tiếp có thể nâng cấp hoặc ghi đè cấu hình repo.", { n: dep.app.name, v: cur });
     depRefreshScript();
-    depCheckConfirm();
     $("#depDlg").showModal();
   }
+  $("#depMode").addEventListener("click", (e) => {
+    e.preventDefault();
+    const b = e.target.closest("button");
+    if (!b) return;
+    dep.mode = b.dataset.md;
+    $("#depConfirm").value = "";
+    depRefreshScript();
+  });
   $("#depMethod").addEventListener("click", (e) => {
     // nằm trong <label>: chặn label chuyển cú nhấp sang nút đầu tiên
     e.preventDefault();
@@ -1115,7 +1155,7 @@
     const h = depHost();
     const name = dep.app.name;
     $("#depDlg").close();
-    $("#depRunTitle").textContent = t("Đang cài {n}", { n: name });
+    $("#depRunTitle").textContent = t(dep.mode === "uninstall" ? "Đang gỡ {n}" : "Đang cài {n}", { n: name });
     $("#depRunSub").textContent = h ? t("Trên server {h}", { h: `${h.name} (${h.address})` }) : t("Trên máy này (local)");
     $("#depRun").showModal();
     if (dep.term) { dep.term.dispose(); dep.term = null; }
@@ -1139,7 +1179,7 @@
       dep.id = await invoke("deploy_run", {
         hostId: h ? h.id : null,
         accountId: h ? depAcc() || null : null,
-        script: DEPLOY.script(dep.app.id, depEffVer(), depHasMethod() ? dep.method : ""),
+        script: DEPLOY.script(dep.app.id, depEffVer(), depHasMethod() ? dep.method : "", dep.mode),
         cols: dep.term.cols,
         rows: dep.term.rows,
       });
@@ -1163,6 +1203,7 @@
       await invoke("term_close", { id: dep.id }).catch(() => {});
     }
     $("#depRun").close();
+    depDetect(true);
   });
   $("#depRun").addEventListener("cancel", (e) => { e.preventDefault(); $("#depRunClose").click(); });
 

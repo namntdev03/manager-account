@@ -33,6 +33,25 @@ confirm() {
   read -r ans
   case "$ans" in y|Y) ;; *) echo "Đã huỷ, chưa thay đổi gì."; exit 1 ;; esac
 }
+if [ "$PM" = brew ]; then SUDO_RM=""; BP="$(brew --prefix)"; else SUDO_RM="$SUDO"; BP=""; fi
+confirm_del() {
+  printf "ĐÂY LÀ XOÁ VĨNH VIỄN, không khôi phục được. Gõ XOA để tiếp tục: "
+  read -r ans
+  [ "$ans" = XOA ] || { echo "Đã huỷ, chưa xoá gì."; exit 1; }
+}
+show_path() {
+  if [ -e "$1" ]; then
+    SZ="$($SUDO_RM du -sh "$1" 2>/dev/null | awk '{print $1}')"
+    echo "  - $1 ($SZ)"
+  fi
+  return 0
+}
+rmp() {
+  for p in "$@"; do
+    if [ -e "$p" ]; then echo "  xoá $p"; $SUDO_RM rm -rf "$p"; fi
+  done
+  return 0
+}
 echo
 `;
 
@@ -188,6 +207,189 @@ echo "Hoàn tất cài Nginx."
 `;
 
   const OS = "Debian/Ubuntu, RHEL/Rocky/Alma, macOS";
+  const DOCKER_UN = String.raw`echo "=== Gỡ Docker và xoá sạch dữ liệu ==="
+if command -v docker >/dev/null 2>&1; then
+  echo "Hiện có: $(docker ps -aq 2>/dev/null | wc -l | tr -d ' ') container, $(docker images -q 2>/dev/null | sort -u | wc -l | tr -d ' ') image, $(docker volume ls -q 2>/dev/null | wc -l | tr -d ' ') volume (TẤT CẢ sẽ bị xoá)."
+else
+  echo "Không thấy lệnh docker (đã gỡ hoặc daemon không chạy); vẫn dọn phần còn sót."
+fi
+echo "Sẽ xoá:"
+case "$PM" in
+  brew)
+    echo "  - Docker Desktop (brew cask docker, kèm --zap)"
+    show_path "$HOME/.docker"
+    show_path "$HOME/Library/Containers/com.docker.docker"
+    show_path "$HOME/Library/Group Containers/group.com.docker"
+    show_path "$HOME/Library/Application Support/Docker Desktop"
+    ;;
+  *)
+    echo "  - các gói docker-ce, docker-ce-cli, containerd.io, buildx, compose"
+    show_path /var/lib/docker
+    show_path /var/lib/containerd
+    show_path /etc/docker
+    ;;
+esac
+confirm_del
+case "$PM" in
+  brew)
+    osascript -e 'quit app "Docker"' >/dev/null 2>&1 || true
+    sleep 3
+    brew uninstall --cask --zap docker || echo "Không gỡ được bằng brew (có thể chưa cài qua brew)."
+    rmp "$HOME/.docker" "$HOME/Library/Containers/com.docker.docker" "$HOME/Library/Group Containers/group.com.docker" "$HOME/Library/Application Support/Docker Desktop"
+    ;;
+  apt)
+    $SUDO systemctl disable --now docker.service docker.socket containerd.service 2>/dev/null || true
+    PK="$(dpkg -l | awk '/^ii/ {print $2}' | grep -E '^(docker-ce|docker-ce-cli|containerd.io|docker-buildx-plugin|docker-compose-plugin|docker-ce-rootless-extras|docker-model-plugin)$' || true)"
+    if [ -n "$PK" ]; then $SUDO apt-get purge -y $PK; fi
+    $SUDO apt-get autoremove -y --purge || true
+    rmp /var/lib/docker /var/lib/containerd /etc/docker /etc/apt/sources.list.d/docker.list /etc/apt/keyrings/docker.asc /etc/apt/keyrings/docker.gpg
+    ;;
+  dnf|yum)
+    $SUDO systemctl disable --now docker.service docker.socket containerd.service 2>/dev/null || true
+    PK="$(rpm -qa --qf '%{NAME}\n' | grep -E '^(docker-ce|docker-ce-cli|containerd.io|docker-buildx-plugin|docker-compose-plugin|docker-ce-rootless-extras)$' || true)"
+    if [ -n "$PK" ]; then $SUDO $PM remove -y $PK; fi
+    rmp /var/lib/docker /var/lib/containerd /etc/docker /etc/yum.repos.d/docker-ce.repo
+    ;;
+esac
+echo "Đã gỡ Docker và xoá dữ liệu. Nhóm người dùng 'docker' (nếu có) được giữ lại, không ảnh hưởng."
+`;
+
+  const POSTGRES_UN = String.raw`echo "=== Gỡ PostgreSQL và xoá sạch dữ liệu ==="
+echo "Sẽ xoá TOÀN BỘ PostgreSQL trên máy này (mọi phiên bản) cùng MỌI cơ sở dữ liệu. Hãy chắc chắn đã sao lưu (pg_dump)."
+PK=""
+case "$PM" in
+  apt)
+    PK="$(dpkg -l | awk '/^ii/ {print $2}' | grep -E '^postgresql' || true)"
+    echo "Gói: $PK"
+    show_path /var/lib/postgresql
+    show_path /etc/postgresql
+    show_path /var/log/postgresql
+    ;;
+  dnf|yum)
+    PK="$(rpm -qa --qf '%{NAME}\n' | grep -E '^(postgresql|pgdg-redhat-repo)' || true)"
+    echo "Gói: $PK"
+    show_path /var/lib/pgsql
+    for d in /usr/pgsql-*; do show_path "$d"; done
+    ;;
+  brew)
+    PK="$(brew list --formula 2>/dev/null | grep -E '^postgresql(@[0-9]+)?$' || true)"
+    echo "Formula: $PK"
+    for f in $PK; do show_path "$BP/var/$f"; done
+    show_path "$BP/var/postgres"
+    ;;
+esac
+if [ -z "$PK" ]; then echo "Không thấy gói PostgreSQL nào được cài."; fi
+confirm_del
+case "$PM" in
+  apt)
+    $SUDO systemctl stop postgresql 2>/dev/null || true
+    if [ -n "$PK" ]; then $SUDO apt-get purge -y $PK; fi
+    $SUDO apt-get autoremove -y --purge || true
+    rmp /var/lib/postgresql /etc/postgresql /etc/postgresql-common /var/log/postgresql /etc/apt/sources.list.d/pgdg.list /etc/apt/sources.list.d/pgdg.sources /usr/share/postgresql-common/pgdg
+    $SUDO userdel postgres 2>/dev/null || true
+    ;;
+  dnf|yum)
+    for u in $(systemctl list-unit-files --no-legend 'postgresql*' 2>/dev/null | awk '{print $1}'); do $SUDO systemctl disable --now "$u" 2>/dev/null || true; done
+    if [ -n "$PK" ]; then $SUDO $PM remove -y $PK; fi
+    rmp /var/lib/pgsql
+    for d in /usr/pgsql-*; do rmp "$d"; done
+    $SUDO userdel postgres 2>/dev/null || true
+    ;;
+  brew)
+    for f in $PK; do
+      brew services stop "$f" || true
+      brew uninstall --force "$f" || echo "Không gỡ được $f (có gói khác phụ thuộc?)."
+      rmp "$BP/var/$f"
+    done
+    rmp "$BP/var/postgres"
+    ;;
+esac
+echo "Đã gỡ PostgreSQL và xoá dữ liệu."
+`;
+
+  const REDIS_UN = String.raw`echo "=== Gỡ Redis và xoá sạch dữ liệu ==="
+echo "Sẽ xoá:"
+case "$PM" in
+  apt)
+    show_path /var/lib/redis
+    show_path /etc/redis
+    show_path /var/log/redis
+    ;;
+  dnf|yum)
+    show_path /var/lib/redis
+    show_path /etc/redis
+    show_path /etc/redis.conf
+    show_path /var/log/redis
+    ;;
+  brew)
+    show_path "$BP/var/db/redis"
+    show_path "$BP/etc/redis.conf"
+    show_path "$BP/etc/redis-sentinel.conf"
+    show_path "$BP/var/log/redis.log"
+    show_path "$HOME/.local/redis"
+    ;;
+esac
+confirm_del
+case "$PM" in
+  apt)
+    $SUDO systemctl disable --now redis-server redis-sentinel 2>/dev/null || true
+    PK="$(dpkg -l | awk '/^ii/ {print $2}' | grep -E '^(redis|redis-server|redis-tools|redis-sentinel)$' || true)"
+    if [ -n "$PK" ]; then $SUDO apt-get purge -y $PK; fi
+    $SUDO apt-get autoremove -y --purge || true
+    rmp /var/lib/redis /etc/redis /var/log/redis /etc/apt/sources.list.d/redis.list /usr/share/keyrings/redis-archive-keyring.gpg
+    ;;
+  dnf|yum)
+    $SUDO systemctl disable --now redis redis-sentinel 2>/dev/null || true
+    if rpm -q redis >/dev/null 2>&1; then $SUDO $PM remove -y redis; fi
+    rmp /var/lib/redis /etc/redis /etc/redis.conf /etc/redis-sentinel.conf /var/log/redis
+    ;;
+  brew)
+    brew services stop redis || true
+    brew uninstall --force redis || echo "Không gỡ được redis bằng brew."
+    pkill -f "$HOME/.local/redis" 2>/dev/null || true
+    rmp "$BP/var/db/redis" "$BP/etc/redis.conf" "$BP/etc/redis-sentinel.conf" "$BP/var/log/redis.log" "$HOME/.local/redis"
+    ;;
+esac
+echo "Đã gỡ Redis và xoá dữ liệu."
+`;
+
+  const NGINX_UN = String.raw`echo "=== Gỡ Nginx và xoá sạch cấu hình ==="
+echo "Thư mục web của bạn (ví dụ /var/www) KHÔNG bị xoá."
+echo "Sẽ xoá:"
+case "$PM" in
+  brew)
+    show_path "$BP/etc/nginx"
+    show_path "$BP/var/log/nginx"
+    ;;
+  *)
+    show_path /etc/nginx
+    show_path /var/log/nginx
+    show_path /var/cache/nginx
+    ;;
+esac
+confirm_del
+case "$PM" in
+  apt)
+    $SUDO systemctl disable --now nginx 2>/dev/null || true
+    PK="$(dpkg -l | awk '/^ii/ {print $2}' | grep -E '^nginx(-.*)?$' || true)"
+    if [ -n "$PK" ]; then $SUDO apt-get purge -y $PK; fi
+    $SUDO apt-get autoremove -y --purge || true
+    rmp /etc/nginx /var/log/nginx /var/cache/nginx /etc/apt/sources.list.d/nginx.list /etc/apt/preferences.d/99nginx /usr/share/keyrings/nginx-archive-keyring.gpg
+    ;;
+  dnf|yum)
+    $SUDO systemctl disable --now nginx 2>/dev/null || true
+    if rpm -q nginx >/dev/null 2>&1; then $SUDO $PM remove -y nginx; fi
+    rmp /etc/nginx /var/log/nginx /var/cache/nginx /etc/yum.repos.d/nginx.repo
+    ;;
+  brew)
+    brew services stop nginx || true
+    brew uninstall --force nginx || echo "Không gỡ được nginx bằng brew."
+    rmp "$BP/etc/nginx" "$BP/var/log/nginx" "$BP/var/run/nginx.pid"
+    ;;
+esac
+echo "Đã gỡ Nginx và xoá cấu hình."
+`;
+
   const APPS = [
     {
       id: "docker", name: "Docker", logo: "docker", os: OS,
@@ -198,25 +400,25 @@ echo "Hoàn tất cài Nginx."
         { v: "28", label: "28.x" },
         { v: "27", label: "27.x" },
       ],
-      script: DOCKER,
+      script: DOCKER, uninstall: DOCKER_UN,
     },
     {
       id: "postgres", name: "PostgreSQL", logo: "postgres", os: OS,
       desc: "Cơ sở dữ liệu PostgreSQL từ repo chính thức PGDG",
       versions: [{ v: "18", label: "18" }, { v: "17", label: "17" }, { v: "16", label: "16" }, { v: "15", label: "15" }, { v: "14", label: "14" }],
-      script: POSTGRES,
+      script: POSTGRES, uninstall: POSTGRES_UN,
     },
     {
       id: "redis", name: "Redis", logo: "redis", os: OS,
       desc: "Redis từ repo chính thức packages.redis.io (dùng cho cache, queue)",
       versions: [{ v: "", label: "Mới nhất" }, { v: "8.0", label: "8.0.x" }, { v: "7.4", label: "7.4.x" }, { v: "7.2", label: "7.2.x" }],
-      script: REDIS,
+      script: REDIS, uninstall: REDIS_UN,
     },
     {
       id: "nginx", name: "Nginx", logo: "nginx", os: OS,
       desc: "Web server / reverse proxy từ repo nginx.org",
       versions: [{ v: "stable", label: "stable" }, { v: "mainline", label: "mainline" }],
-      script: NGINX,
+      script: NGINX, uninstall: NGINX_UN,
     },
   ];
   // Sắp có: cần thiết kế riêng vì nhiều bước và rủi ro cao hơn
@@ -230,9 +432,10 @@ echo "Hoàn tất cài Nginx."
   window.DEPLOY = {
     APPS,
     SOON,
-    script(appId, version, method) {
+    script(appId, version, method, mode) {
       const a = APPS.find((x) => x.id === appId);
       if (!a) return "";
+      if (mode === "uninstall") return PRE + a.uninstall;
       return PRE + a.script.split("@METHOD@").join(method || "").split("@VERSION@").join(version || "");
     },
   };
