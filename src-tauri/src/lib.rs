@@ -52,6 +52,9 @@ struct Profile {
     /// Kubernetes: tên context hiện tại trong kubeconfig
     #[serde(default)]
     context: String,
+    /// ArgoCD / Harbor: bỏ qua xác thực chứng chỉ TLS (cluster dùng chứng chỉ tự ký)
+    #[serde(default)]
+    insecure: bool,
 }
 
 fn default_kind() -> String {
@@ -76,6 +79,7 @@ struct ProfileInput {
     /// Kubernetes: nội dung kubeconfig (trống = giữ nguyên) và môi trường
     kubeconfig: Option<String>,
     env: Option<String>,
+    insecure: Option<bool>,
     /// SSH: passphrase của key (trống = giữ nguyên)
     passphrase: Option<String>,
     /// SSH: xoá passphrase đã lưu
@@ -399,6 +403,7 @@ fn save_ssh_profile(app: &tauri::AppHandle, input: ProfileInput) -> Result<Profi
         scope: String::new(),
         env: String::new(),
         context: String::new(),
+        insecure: false,
     };
     if let Some(i) = list.iter().position(|x| x.id == id) {
         list[i] = p.clone();
@@ -2199,6 +2204,7 @@ fn save_k8s_profile(app: &tauri::AppHandle, input: ProfileInput) -> Result<Profi
         scope: String::new(),
         env,
         context: kube_field(&text, "current-context").unwrap_or_default(),
+        insecure: false,
     };
     if let Some(i) = list.iter().position(|x| x.id == id) {
         list[i] = p.clone();
@@ -2207,6 +2213,266 @@ fn save_k8s_profile(app: &tauri::AppHandle, input: ProfileInput) -> Result<Profi
     }
     save_profiles(app, &list)?;
     Ok(p)
+}
+
+// ───────────────────────── ArgoCD / Harbor ─────────────────────────
+
+fn cq(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+fn svc_norm_url(input: &str) -> String {
+    let s = input.trim().trim_end_matches('/');
+    if s.is_empty() {
+        return String::new();
+    }
+    if s.starts_with("http://") || s.starts_with("https://") {
+        s.to_string()
+    } else {
+        format!("https://{s}")
+    }
+}
+
+fn svc_host(url: &str) -> String {
+    url.split("://").last().unwrap_or("").split('/').next().unwrap_or("").to_string()
+}
+
+fn active_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(data_dir(app)?.join("active.json"))
+}
+
+fn load_active(app: &tauri::AppHandle) -> HashMap<String, String> {
+    active_file(app)
+        .ok()
+        .and_then(|f| fs::read_to_string(f).ok())
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn save_active(app: &tauri::AppHandle, m: &HashMap<String, String>) {
+    if let (Ok(f), Ok(s)) = (active_file(app), serde_json::to_string(m)) {
+        let _ = fs::write(f, s);
+    }
+}
+
+fn svc_key(kind: &str, host: &str) -> String {
+    format!("{kind}:{host}")
+}
+
+fn svc_is_active(app: &tauri::AppHandle, p: &Profile) -> bool {
+    load_active(app).get(&svc_key(&p.kind, &p.host)).map(|s| s == &p.id).unwrap_or(false)
+}
+
+fn save_svc_profile(app: &tauri::AppHandle, input: ProfileInput, kind: &str) -> Result<Profile, String> {
+    let mut list = load_profiles(app)?;
+    let name = input.name.trim().to_string();
+    let url = svc_norm_url(input.registry.as_deref().unwrap_or(""));
+    if name.is_empty() || url.is_empty() {
+        return Err("Cần nhập tên hiển thị và địa chỉ (URL)".into());
+    }
+    let login = input.login.as_deref().map(str::trim).unwrap_or("").to_string();
+    if kind == "harbor" && login.is_empty() {
+        return Err("Cần nhập username (hoặc robot account) của Harbor".into());
+    }
+    let id = input.id.clone().filter(|s| !s.is_empty()).unwrap_or_else(new_id);
+    let existing = list.iter().find(|p| p.id == id).cloned();
+    let tok = input.token.as_deref().map(str::trim).unwrap_or("");
+    let mut has_token = existing.as_ref().map(|e| e.has_token).unwrap_or(false);
+    if !tok.is_empty() {
+        entry(&id)?
+            .set_password(tok)
+            .map_err(|e| format!("Không lưu được vào keychain: {e}"))?;
+        has_token = true;
+    }
+    if !has_token {
+        return Err(if kind == "harbor" {
+            "Cần nhập mật khẩu hoặc robot secret".into()
+        } else {
+            "Cần nhập auth token của ArgoCD".into()
+        });
+    }
+    let env = match input.env.as_deref().map(str::trim).unwrap_or("") {
+        e @ ("prod" | "staging" | "dev") => e.to_string(),
+        _ => String::new(),
+    };
+    let p = Profile {
+        id: id.clone(),
+        name,
+        host: svc_host(&url),
+        user_name: String::new(),
+        user_email: String::new(),
+        auth: "token".to_string(),
+        login,
+        ssh_key_path: String::new(),
+        has_token,
+        has_passphrase: false,
+        kind: kind.to_string(),
+        registry: url,
+        scope: String::new(),
+        env,
+        context: String::new(),
+        insecure: input.insecure.unwrap_or(false),
+    };
+    if let Some(i) = list.iter().position(|x| x.id == id) {
+        list[i] = p.clone();
+    } else {
+        list.push(p.clone());
+    }
+    save_profiles(app, &list)?;
+    Ok(p)
+}
+
+/// Gọi một API qua curl; cấu hình (kể cả thông tin đăng nhập) đi qua stdin để không lộ trong danh sách tiến trình.
+fn svc_get(url: &str, auth_line: &str, insecure: bool) -> Result<(String, String), String> {
+    let cfg = format!(
+        "url = \"{}\"\n{auth_line}header = \"User-Agent: manager-account\"\nheader = \"Accept: application/json\"\n",
+        cq(url)
+    );
+    let mut args = vec!["-sS", "-m", "15", "-K", "-", "-w", "\n%{http_code}"];
+    if insecure {
+        args.push("-k");
+    }
+    let mut c = new_cmd("curl");
+    c.args(args);
+    let o = run_cmd(c, Some(cfg.as_str()))?;
+    if !o.ok {
+        return Err(format!("curl lỗi: {}", o.stderr));
+    }
+    Ok(match o.stdout.rsplit_once('\n') {
+        Some((b, c)) => (b.to_string(), c.trim().to_string()),
+        None => (String::new(), o.stdout.trim().to_string()),
+    })
+}
+
+fn svc_test(app: &tauri::AppHandle, p: &Profile) -> Result<TestResult, String> {
+    let secret = entry(&p.id)?
+        .get_password()
+        .map_err(|e| format!("Không đọc được bí mật từ keychain: {e}"))?;
+    let bad = |m: String| Ok(TestResult { ok: false, message: m });
+    let _ = app;
+    if p.kind == "harbor" {
+        let auth = format!("user = \"{}:{}\"\n", cq(&p.login), cq(&secret));
+        let (_, code) = svc_get(&format!("{}/api/v2.0/projects?page_size=1", p.registry), &auth, p.insecure)?;
+        return match code.as_str() {
+            "200" => Ok(TestResult { ok: true, message: format!("Đăng nhập được Harbor với {}", p.login) }),
+            "401" => bad("Sai username hoặc mật khẩu / robot secret (HTTP 401).".into()),
+            "403" => bad("Tài khoản không có quyền (HTTP 403).".into()),
+            c => bad(format!("Phản hồi bất thường (HTTP {c}).")),
+        };
+    }
+    let auth = format!("header = \"Authorization: Bearer {}\"\n", cq(&secret));
+    let (body, code) = svc_get(&format!("{}/api/v1/session/userinfo", p.registry), &auth, p.insecure)?;
+    match code.as_str() {
+        "200" => {
+            let v: serde_json::Value = serde_json::from_str(&body).unwrap_or(serde_json::Value::Null);
+            if v["loggedIn"].as_bool().unwrap_or(false) {
+                let who = v["username"].as_str().unwrap_or("?");
+                Ok(TestResult { ok: true, message: format!("Token hợp lệ - đăng nhập là {who}") })
+            } else {
+                bad("Token không hợp lệ hoặc đã hết hạn.".into())
+            }
+        }
+        "401" | "403" => bad("Token sai hoặc đã hết hạn.".into()),
+        c => bad(format!("Phản hồi bất thường (HTTP {c}). Kiểm tra lại địa chỉ ArgoCD.")),
+    }
+}
+
+fn argocd_config_path() -> PathBuf {
+    PathBuf::from(home()).join(".config").join("argocd").join("config")
+}
+
+fn yq(s: &str) -> String {
+    serde_json::to_string(s).unwrap_or_else(|_| "\"\"".to_string())
+}
+
+/// Ghi ~/.config/argocd/config gồm mọi tài khoản ArgoCD (mỗi tài khoản là một context) và đặt context hiện tại.
+fn argocd_apply(app: &tauri::AppHandle, current: &Profile) -> Result<Option<PathBuf>, String> {
+    let list: Vec<Profile> = load_profiles(app)?.into_iter().filter(|p| p.kind == "argocd").collect();
+    let ctx_name = |p: &Profile| {
+        if list.iter().filter(|x| x.name == p.name).count() > 1 {
+            format!("{}-{}", p.name, p.id.chars().take(4).collect::<String>())
+        } else {
+            p.name.clone()
+        }
+    };
+    let mut contexts = String::from("contexts:\n");
+    let mut servers = String::from("servers:\n");
+    let mut users = String::from("users:\n");
+    let mut seen: Vec<String> = vec![];
+    for p in &list {
+        let Some(tok) = entry(&p.id).ok().and_then(|e| e.get_password().ok()) else { continue };
+        let uname = format!("u-{}", p.id);
+        contexts.push_str(&format!("- name: {}\n  server: {}\n  user: {}\n", yq(&ctx_name(p)), yq(&p.host), yq(&uname)));
+        if !seen.contains(&p.host) {
+            seen.push(p.host.clone());
+            servers.push_str(&format!("- server: {}\n", yq(&p.host)));
+            if list.iter().any(|x| x.host == p.host && x.insecure) {
+                servers.push_str("  insecure: true\n");
+            }
+            if p.registry.starts_with("http://") {
+                servers.push_str("  plain-text: true\n");
+            }
+        }
+        users.push_str(&format!("- name: {}\n  auth-token: {}\n", yq(&uname), yq(&tok)));
+    }
+    let body = format!("{contexts}current-context: {}\n{servers}{users}", yq(&ctx_name(current)));
+    write_managed(&argocd_config_path(), &body)
+}
+
+/// Ghi file cấu hình do app quản lý (có dòng đánh dấu). File đang có mà không do app ghi được sao lưu trước.
+fn write_managed(path: &std::path::Path, body: &str) -> Result<Option<PathBuf>, String> {
+    if let Some(d) = path.parent() {
+        fs::create_dir_all(d).map_err(|e| e.to_string())?;
+    }
+    let mut backup = None;
+    if let Ok(old) = fs::read_to_string(path) {
+        if !old.trim().is_empty() && !old.starts_with(KUBE_MARK) {
+            let ts = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+            let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+            let b = path.with_file_name(format!("{name}.backup-{ts}"));
+            fs::copy(path, &b).map_err(|e| format!("Không sao lưu được file cấu hình cũ: {e}"))?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = fs::set_permissions(&b, fs::Permissions::from_mode(0o600));
+            }
+            backup = Some(b);
+        }
+    }
+    fs::write(path, format!("{KUBE_MARK}{body}")).map_err(|e| format!("Không ghi được {}: {e}", path.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+    }
+    Ok(backup)
+}
+
+fn svc_apply(app: &tauri::AppHandle, p: &Profile) -> Result<Vec<String>, String> {
+    let mut log: Vec<String> = vec![];
+    if p.kind == "harbor" {
+        let secret = entry(&p.id)?
+            .get_password()
+            .map_err(|e| format!("Không đọc được bí mật từ keychain: {e}"))?;
+        let mut c = new_cmd("docker");
+        c.args(["login", p.host.as_str(), "-u", p.login.as_str(), "--password-stdin"]);
+        let o = run_cmd(c, Some(secret.as_str()))?;
+        if !o.ok {
+            let e = if o.stderr.is_empty() { o.stdout } else { o.stderr };
+            return Err(format!("docker login lỗi: {e}"));
+        }
+        log.push(format!("docker login {} (user {})", p.host, p.login));
+    } else {
+        let backup = argocd_apply(app, p)?;
+        log.push(format!("~/.config/argocd/config -> context {}", p.name));
+        if let Some(b) = backup {
+            log.push(format!("Đã sao lưu file cũ: {}", b.display()));
+        }
+    }
+    let mut m = load_active(app);
+    m.insert(svc_key(&p.kind, &p.host), p.id.clone());
+    save_active(app, &m);
+    Ok(log)
 }
 
 fn save_npm_profile(app: &tauri::AppHandle, input: ProfileInput) -> Result<Profile, String> {
@@ -2241,6 +2507,7 @@ fn save_npm_profile(app: &tauri::AppHandle, input: ProfileInput) -> Result<Profi
         scope,
         env: String::new(),
         context: String::new(),
+        insecure: false,
     };
     let tok = input.token.as_deref().map(str::trim).unwrap_or("");
     if !tok.is_empty() {
@@ -2274,6 +2541,12 @@ async fn save_profile(app: tauri::AppHandle, input: ProfileInput) -> Result<Prof
     if input.kind.as_deref() == Some("k8s") {
         return save_k8s_profile(&app, input);
     }
+    if input.kind.as_deref() == Some("argocd") {
+        return save_svc_profile(&app, input, "argocd");
+    }
+    if input.kind.as_deref() == Some("harbor") {
+        return save_svc_profile(&app, input, "harbor");
+    }
     let mut list = load_profiles(&app)?;
     let name = input.name.trim().to_string();
     let host = norm_host(&input.host);
@@ -2305,6 +2578,7 @@ async fn save_profile(app: tauri::AppHandle, input: ProfileInput) -> Result<Prof
         scope: String::new(),
         env: String::new(),
         context: String::new(),
+        insecure: false,
     };
 
     match input.auth.as_str() {
@@ -2416,7 +2690,12 @@ async fn delete_profile(app: tauri::AppHandle, id: String) -> Result<(), String>
     if p.kind == "k8s" {
         kube_remove(&app, &id);
     }
-    if p.auth == "token" && !p.login.is_empty() {
+    if p.kind == "argocd" || p.kind == "harbor" {
+        let mut m = load_active(&app);
+        m.retain(|_, v| v != &id);
+        save_active(&app, &m);
+    }
+    if p.kind == "git" && p.auth == "token" && !p.login.is_empty() {
         let input = format!("protocol=https\nhost={}\nusername={}\n\n", p.host, p.login);
         let _ = git(None, &["credential", "reject"], Some(input.as_str()));
     }
@@ -2449,6 +2728,9 @@ async fn apply_profile(
             log.push(format!("Đã sao lưu file cũ: {}", b.display()));
         }
         return Ok(log);
+    }
+    if p.kind == "argocd" || p.kind == "harbor" {
+        return svc_apply(&app, &p);
     }
     let t = target(&scope, repo_path)?;
     let where_ = if t.repo.is_some() { "repo" } else { "toàn máy" };
@@ -2566,6 +2848,9 @@ async fn get_current(
             if p.kind == "k8s" {
                 return kube_is_active(&app, p);
             }
+            if p.kind == "argocd" || p.kind == "harbor" {
+                return svc_is_active(&app, p);
+            }
             if p.kind == "npm" {
                 let path = npmrc_path(repo);
                 let have = npmrc_get(&path, &npm_auth_key(&p.registry));
@@ -2604,6 +2889,12 @@ async fn test_profile(app: tauri::AppHandle, id: String) -> Result<TestResult, S
             ok: false,
             message: "Tài khoản SSH được thử bằng cách kết nối tới một SSH host.".into(),
         });
+    }
+    if p.kind == "argocd" || p.kind == "harbor" {
+        let (app2, p2) = (app.clone(), p.clone());
+        return tauri::async_runtime::spawn_blocking(move || svc_test(&app2, &p2))
+            .await
+            .map_err(|e| e.to_string())?;
     }
     if p.kind == "k8s" {
         let text = kube_load(&app, &p.id)?;

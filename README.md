@@ -5,6 +5,7 @@
 - **Tài khoản Git** (GitHub/GitLab/Bitbucket, SSH key hoặc token): đổi bằng một cú bấm, toàn máy hoặc một repo; **quy tắc theo thư mục** tự dùng đúng tài khoản; tạo SSH key ed25519 trong app.
 - **Tài khoản npm**: token cho npmjs, GitHub Packages hoặc registry riêng.
 - **SSH host**: terminal nhiều tab trong app, tự điền mật khẩu/passphrase, **quản lý file** trên server qua SSH.
+- **Kubernetes, ArgoCD, Harbor**: lưu kubeconfig (mã hoá), token ArgoCD và tài khoản Harbor, đổi bằng một cú bấm, có nhãn môi trường (dev/staging/production).
 - **Kho lưu trữ**: sao lưu mọi thứ vào một file mã hoá bằng mật khẩu, khôi phục trên máy khác.
 - **Hiệu năng**, **xác thực** (Touch ID / Windows Hello / mật khẩu) trước khi xem bí mật, Tiếng Việt và English.
 
@@ -26,6 +27,9 @@
 - **Quản lý file trên SSH host**: duyệt, tải lên/xuống, tạo thư mục, đổi tên, xoá. Chạy qua `ssh` với các lệnh `ls`, `cat`, `tar`, `mkdir`, `mv`, `rm` (không dùng giao thức SFTP thật, nên không có phần trăm tiến độ).
 - **Tạo SSH key**: nút tạo key ed25519 (`ssh-keygen`) trong form tài khoản Git, có sao chép public key và mở trang thêm key của GitHub/GitLab. Key chỉ nằm trong form cho tới khi bạn bấm Lưu.
 - **Kho lưu trữ**: xuất tài khoản, bí mật, nội dung key, passphrase, SSH host và quy tắc ra file `.macbackup` mã hoá (Argon2id + ChaCha20-Poly1305). Khi khôi phục, dữ liệu được gộp vào dữ liệu hiện có; trùng mã thì hỏi bạn ghi đè hay giữ cả hai.
+- **Kubernetes**: dán kubeconfig đã nhúng sẵn chứng chỉ (`kubectl config view --flatten --minify --raw`). App mã hoá thành file riêng (khoá trong kho bảo mật), bấm dùng sẽ ghi `~/.kube/config` và sao lưu file cũ thành `config.backup-<thời gian>`. Cluster đánh dấu production hỏi xác nhận trước khi đổi. Test dùng `kubectl get --raw /version`.
+- **ArgoCD**: lưu địa chỉ và account token (nên tạo token riêng, quyền tối thiểu). Bấm dùng ghi `~/.config/argocd/config`, mỗi tài khoản là một context. Test gọi `/api/v1/session/userinfo`. Nếu ArgoCD không mở ra ngoài, dùng `https://localhost:8080` sau `kubectl port-forward` và bật tuỳ chọn chứng chỉ tự ký.
+- **Harbor**: lưu địa chỉ, username (nên dùng robot account) và mật khẩu/secret. Bấm dùng chạy `docker login`. Test gọi `/api/v2.0/projects`.
 - **Hiệu năng**: RAM, CPU và số phiên SSH mà chính app đang dùng.
 - **Ngôn ngữ**: Tiếng Việt và English (Cài đặt → Ngôn ngữ; mặc định theo ngôn ngữ hệ thống). Thêm ngôn ngữ mới: thêm một bảng trong `src/i18n.js`.
 
@@ -38,7 +42,7 @@
   1. **Kiểm tra bản cập nhật** (khi mở app, tắt được ở *Cài đặt*): một yêu cầu `GET` tới
      `api.github.com/repos/namntdev03/manager-account/releases/latest`, không gửi dữ liệu nào của bạn.
   2. **Bạn bấm “Cập nhật ngay”**: tải file từ GitHub Releases của dự án, kiểm tra chữ ký số (minisign) trước khi cài.
-  3. **Bạn bấm “Test kết nối”**: SSH tới `git@<host>` hoặc gọi API `/user` của GitHub/GitLab, chỉ tới đúng nền tảng của tài khoản đó.
+  3. **Bạn bấm “Test kết nối”**: SSH tới `git@<host>`, gọi API của GitHub/GitLab, npm registry, ArgoCD, Harbor hoặc `kubectl get --raw /version` tới cluster, chỉ tới đúng nền tảng hoặc máy chủ của tài khoản đó.
   4. **Bạn mở terminal hoặc quản lý file của một SSH host**: kết nối SSH tới chính máy chủ đó.
   5. **Bạn bấm “Mở trang thêm key”**: app mở trình duyệt tới trang SSH key của GitHub/GitLab, không gửi gì kèm theo.
 - App không bao giờ gửi tên, email, token, mật khẩu, key, danh sách tài khoản/host hay đường dẫn repo tới bất kỳ đâu.
@@ -90,7 +94,8 @@ pnpm set:pubkey
   - macOS: `~/Library/Application Support/com.nguyenthanhnam.manageraccount/`
   - Windows: `%APPDATA%\com.nguyenthanhnam.manageraccount\`
   - Linux: `~/.local/share/com.nguyenthanhnam.manageraccount/`
-- Private key dán vào app được lưu thành file riêng với quyền `600`.
+- Private key dán vào app được lưu thành file riêng với quyền `600`. Kubeconfig được mã hoá (ChaCha20-Poly1305) thành `kube/<id>.enc`, khoá 32 byte nằm trong kho bảo mật (Credential Manager giới hạn độ dài nên không chứa trực tiếp được kubeconfig).
+- Token ArgoCD ghi vào `~/.config/argocd/config` ở dạng chữ thường (CLI `argocd` yêu cầu vậy), file có quyền `600`.
 - Token khi test được đưa cho `curl` qua stdin, không hiện trong danh sách tiến trình.
 - Mật khẩu SSH và passphrase của key được lưu trong kho bảo mật và điền tự động qua `SSH_ASKPASS` (chính file chạy của app đóng vai trò askpass, đọc kho bảo mật rồi trả lời cho `ssh`, không ghi ra file). Nếu chưa lưu thì `ssh` chạy ở chế độ không hỏi (BatchMode) cho phần quản lý file; lúc đó có thể nạp key vào `ssh-agent` (`ssh-add <key>`).
 - SSH dùng `StrictHostKeyChecking=accept-new`: lần đầu tự tin máy chủ mới, sau đó báo lỗi nếu khoá máy chủ đổi.

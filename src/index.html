@@ -216,6 +216,7 @@
             <li><b>Tài khoản npm.</b> Lưu token cho npmjs, GitHub Packages hoặc registry riêng (theo scope), rồi ghi vào <code>.npmrc</code> khi bạn bấm dùng.</li>
             <li><b>SSH host.</b> Kết nối server bằng terminal ngay trong app (nhiều tab), mật khẩu và passphrase của key được tự điền. Có thể <b>duyệt, tải lên, tải về, đổi tên và xoá file</b> trên server qua SSH.</li>
             <li><b>Kho lưu trữ.</b> Sao lưu toàn bộ tài khoản, SSH host và quy tắc vào một file mã hoá bằng mật khẩu của bạn, rồi khôi phục khi đổi sang máy khác.</li>
+            <li><b>Kubernetes, ArgoCD, Harbor.</b> Lưu kubeconfig (mã hoá), token ArgoCD và tài khoản Harbor, đổi cluster hoặc đăng nhập bằng một cú bấm, có nhãn production để tránh nhầm.</li>
             <li><b>Hiệu năng.</b> Xem RAM, CPU và số phiên SSH mà chính app đang dùng.</li>
           </ul>
         </div>
@@ -228,6 +229,7 @@
             <li><b>Quy tắc theo thư mục:</b> thêm các dòng <code>includeIf "gitdir:…"</code> vào <code>~/.gitconfig</code>, mỗi dòng trỏ tới một file cấu hình nhỏ trong thư mục dữ liệu của app. Xoá quy tắc thì các dòng này bị gỡ.</li>
             <li><b>npm:</b> ghi token và <code>registry=</code> vào <code>~/.npmrc</code> hoặc <code>.npmrc</code> của repo, các dòng khác giữ nguyên.</li>
             <li><b>SSH và quản lý file:</b> app chạy lệnh <code>ssh</code> có sẵn của hệ điều hành. Mật khẩu và passphrase được điền qua cơ chế <code>SSH_ASKPASS</code> (chính app đọc Keychain, không ghi ra file). Phần quản lý file chạy các lệnh <code>ls</code>, <code>cat</code>, <code>tar</code>, <code>mkdir</code>, <code>mv</code>, <code>rm</code> trên server bạn chọn qua kết nối SSH đó.</li>
+            <li><b>Kubernetes, ArgoCD, Harbor:</b> ghi <code>~/.kube/config</code> và <code>~/.config/argocd/config</code> (file cũ của bạn được sao lưu trước), hoặc chạy <code>docker login</code> tới Harbor khi bạn bấm dùng tài khoản.</li>
           </ul>
         </div>
 
@@ -235,8 +237,8 @@
           <h3>Chính sách dữ liệu &amp; quyền riêng tư</h3>
           <ul class="feat">
             <li><b>Dữ liệu chỉ nằm trên máy bạn.</b> Không có server của app, không tài khoản người dùng, không thống kê, không quảng cáo, không bán hay chia sẻ dữ liệu cho bên thứ ba.</li>
-            <li><b>Nơi lưu:</b> thông tin tài khoản, SSH host và quy tắc (tên, email, host, đường dẫn key…) nằm trong thư mục dữ liệu của app; <b>token, mật khẩu SSH và passphrase nằm trong kho bảo mật của hệ điều hành</b> (Keychain / Credential Manager / Secret Service), không ghi vào file thường; private key dán hoặc tạo trong app được lưu thành file riêng quyền 600.</li>
-            <li><b>Khi nào app dùng mạng:</b> (1) kiểm tra bản cập nhật, chỉ một yêu cầu đọc tới GitHub Releases của dự án, tắt được ở <i>Cài đặt</i>; (2) khi bạn bấm <i>Cập nhật ngay</i>, tải file cập nhật từ GitHub Releases của dự án; (3) khi bạn bấm <i>Test kết nối</i>, chỉ tới đúng nền tảng của tài khoản đó; (4) khi bạn mở terminal hoặc quản lý file của một SSH host, kết nối SSH tới chính máy chủ đó; (5) khi bạn bấm <i>Mở trang thêm key</i>, app chỉ mở trình duyệt tới trang SSH key của GitHub/GitLab, không gửi gì kèm theo.</li>
+            <li><b>Nơi lưu:</b> thông tin tài khoản, SSH host và quy tắc (tên, email, host, đường dẫn key…) nằm trong thư mục dữ liệu của app; <b>token, mật khẩu SSH và passphrase nằm trong kho bảo mật của hệ điều hành</b> (Keychain / Credential Manager / Secret Service), không ghi vào file thường; private key dán hoặc tạo trong app được lưu thành file riêng quyền 600; kubeconfig được mã hoá thành file riêng, khoá giải mã nằm trong kho bảo mật.</li>
+            <li><b>Khi nào app dùng mạng:</b> (1) kiểm tra bản cập nhật, chỉ một yêu cầu đọc tới GitHub Releases của dự án, tắt được ở <i>Cài đặt</i>; (2) khi bạn bấm <i>Cập nhật ngay</i>, tải file cập nhật từ GitHub Releases của dự án; (3) khi bạn bấm <i>Test kết nối</i>, chỉ tới đúng nền tảng hoặc máy chủ của tài khoản đó (GitHub, GitLab, npm registry, Kubernetes, ArgoCD, Harbor); (4) khi bạn mở terminal hoặc quản lý file của một SSH host, kết nối SSH tới chính máy chủ đó; (5) khi bạn bấm <i>Mở trang thêm key</i>, app chỉ mở trình duyệt tới trang SSH key của GitHub/GitLab, không gửi gì kèm theo.</li>
             <li><b>Không bao giờ gửi</b> tên, email, token, mật khẩu, SSH key, danh sách tài khoản, danh sách SSH host hay đường dẫn repo của bạn tới bất kỳ đâu.</li>
             <li><b>Kho lưu trữ:</b> file sao lưu chứa mọi bí mật của bạn, được mã hoá bằng mật khẩu bạn đặt (Argon2id và ChaCha20-Poly1305). App không giữ mật khẩu đó và không tự tải file lên đâu cả. Mất mật khẩu thì không thể mở lại file. Hãy cất file ở nơi an toàn.</li>
             <li><b>Xác thực khi xem bí mật:</b> hiện token, mật khẩu, key, passphrase hoặc tạo file sao lưu sẽ hỏi Touch ID / mật khẩu máy (macOS), Windows Hello hoặc PIN (Windows), mật khẩu hệ thống (Linux). Tính năng bật mặc định và tắt được ở <i>Cài đặt</i>. Nó chặn người khác dùng ké lúc app đang mở, nhưng không ngăn được phần mềm khác chạy dưới tài khoản của bạn đọc trực tiếp kho bảo mật của hệ điều hành.</li>
@@ -304,15 +306,29 @@
         <p class="hint">Bạn có thể dùng mật khẩu, key (RSA, ED25519, ECDSA… mọi loại key OpenSSH) hoặc cả hai. Mật khẩu lưu trong kho bảo mật của hệ điều hành và được tự điền khi kết nối. Không có cả hai thì terminal sẽ hỏi.</p>
       </div>
 
-      <div id="k8sFields" hidden>
-        <label>Môi trường
-          <div class="seg" id="envSeg">
-            <button type="button" data-env="">Không đánh dấu</button>
-            <button type="button" data-env="dev">dev</button>
-            <button type="button" data-env="staging">staging</button>
-            <button type="button" data-env="prod">production</button>
-          </div>
+      <label id="svcUrlLabel" hidden>Địa chỉ (URL)
+        <input id="f_svcurl" placeholder="https://argocd.example.com" />
+      </label>
+
+      <label id="envLabel" hidden>Môi trường
+        <div class="seg" id="envSeg">
+          <button type="button" data-env="">Không đánh dấu</button>
+          <button type="button" data-env="dev">dev</button>
+          <button type="button" data-env="staging">staging</button>
+          <button type="button" data-env="prod">production</button>
+        </div>
+      </label>
+
+      <div id="svcFields" hidden>
+        <label class="check">
+          <input type="checkbox" id="f_insecure" />
+          <span>Chứng chỉ tự ký: bỏ qua xác thực TLS</span>
         </label>
+        <p class="hint" id="hintArgo">Dùng một <b>account token</b> riêng cho app, quyền vừa đủ (ví dụ chỉ đọc), tạo bằng <code>argocd account generate-token --account &lt;tên&gt;</code>. Nếu ArgoCD không mở ra ngoài, dùng <code>https://localhost:8080</code> sau khi <code>kubectl port-forward</code>, rồi bật tuỳ chọn chứng chỉ tự ký. Khi bấm “Dùng tài khoản này”, app ghi <code>~/.config/argocd/config</code> (mỗi tài khoản là một context) và sao lưu file cũ nếu có.</p>
+        <p class="hint" id="hintHarbor">Nên dùng <b>robot account</b> thay vì tài khoản cá nhân. Khi bấm “Dùng tài khoản này”, app chạy <code>docker login</code> tới Harbor này (cần cài Docker), thông tin đăng nhập do Docker lưu theo cấu hình của bạn.</p>
+      </div>
+
+      <div id="k8sFields" hidden>
         <label>Kubeconfig
           <textarea id="f_kube" rows="6" spellcheck="false"></textarea>
         </label>
