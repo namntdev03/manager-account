@@ -1094,12 +1094,16 @@
     $("#depDlg").showModal();
   }
   $("#depMethod").addEventListener("click", (e) => {
+    // nằm trong <label>: chặn label chuyển cú nhấp sang nút đầu tiên
+    e.preventDefault();
     const b = e.target.closest("button");
     if (!b) return;
     dep.method = b.dataset.m;
     depRefreshScript();
   });
   $("#depVer").addEventListener("click", (e) => {
+    // nằm trong <label>: chặn label chuyển cú nhấp sang nút đầu tiên
+    e.preventDefault();
     const b = e.target.closest("button");
     if (!b) return;
     dep.ver = b.dataset.v;
