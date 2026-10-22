@@ -922,6 +922,25 @@
     const m = /(\d+\.\d+(?:\.\d+)?)/.exec(line || "");
     return m ? m[1] : "";
   };
+  // phiên bản có sẵn lấy từ nguồn chính thức: { loading, loaded, at, live: { docker: [...] }, errors: {} }
+  const depLive = { loading: false, loaded: false, at: null, live: {}, errors: {} };
+  const depVersionsOf = (a) => depLive.live[a.id] || a.versions;
+  async function depLoadVersions(force) {
+    if (depLive.loading || (depLive.loaded && !force)) return;
+    depLive.loading = true;
+    try {
+      const r = await invoke("deploy_versions");
+      depLive.live = r.versions || {};
+      depLive.errors = r.errors || {};
+      depLive.at = new Date();
+    } catch (e) {
+      depLive.live = {};
+      depLive.errors = { all: tr(e) };
+    }
+    depLive.loading = false;
+    depLive.loaded = true;
+    if ($("#depDlg").open && dep.app) depRenderVersions(true);
+  }
   async function depDetect(force) {
     const key = depTarget() + "|" + (depTarget() ? depAcc() : "");
     if (!force && depSt.key === key) return;
@@ -989,14 +1008,27 @@
         : t("Cài trực tiếp lên máy đang dùng app (macOS dùng Homebrew, Linux dùng apt/dnf).");
     renderDepGrid();
     depDetect(false);
+    depLoadVersions(false);
   }
   $("#page-deploy").addEventListener("click", (e) => {
     const sel = e.target.closest(".sel");
     if (sel) return openSel(sel);
-    if (e.target.closest("#depRecheck")) return depDetect(true);
+    if (e.target.closest("#depRecheck")) { depLoadVersions(true); return depDetect(true); }
     const b = e.target.closest("[data-app]");
     if (b) openDepDlg(b.dataset.app);
   });
+  function depRenderVersions(keep) {
+    const list = depVersionsOf(dep.app);
+    if (!keep || !list.some((v) => v.v === dep.ver)) dep.ver = list[0].v;
+    $("#depVer").innerHTML = list.map((v) => `<button type="button" data-v="${esc(v.v)}">${esc(t(v.label))}</button>`).join("");
+    const fromNet = !!depLive.live[dep.app.id];
+    $("#depVerNote").textContent = depLive.loading
+      ? t("Đang lấy danh sách phiên bản từ nguồn chính thức…")
+      : fromNet
+        ? t("Danh sách lấy trực tiếp từ nguồn chính thức lúc {t}.", { t: depLive.at ? depLive.at.toLocaleTimeString() : "" })
+        : t("Không lấy được danh sách mới, đang dùng danh sách có sẵn trong app (có thể đã cũ).");
+    depRefreshScript();
+  }
   function depRefreshScript() {
     $("#depScript").value = DEPLOY.script(dep.app.id, dep.ver);
     document.querySelectorAll("#depVer button").forEach((b) => b.classList.toggle("on", b.dataset.v === dep.ver));
@@ -1007,11 +1039,10 @@
   }
   function openDepDlg(appId) {
     dep.app = DEPLOY.APPS.find((x) => x.id === appId);
-    dep.ver = dep.app.versions[0].v;
     const h = depHost();
     $("#depTitle").textContent = t("Cài {n}", { n: dep.app.name });
     $("#depSub").textContent = h ? t("Lên server {h}", { h: `${h.name} (${h.address})` }) : t("Lên máy này (local)");
-    $("#depVer").innerHTML = dep.app.versions.map((v) => `<button type="button" data-v="${esc(v.v)}">${esc(t(v.label))}</button>`).join("");
+    depRenderVersions(false);
     $("#depConfirm").value = "";
     $("#depConfirmLbl").hidden = !h;
     if (h) $("#depConfirmTxt").textContent = t("Gõ tên server “{h}” để xác nhận", { h: h.name });

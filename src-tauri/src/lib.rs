@@ -1861,6 +1861,176 @@ async fn deploy_detect(
     .map_err(|e| e.to_string())?
 }
 
+// ───────────────────────── Phiên bản có sẵn của các ứng dụng (lấy từ nguồn chính thức) ─────────────────────────
+
+fn http_get(url: &str) -> Result<String, String> {
+    let mut c = new_cmd("curl");
+    c.args(["-fsSL", "-m", "15", "-A", "manager-account", "-H", "Accept: application/json, text/html", url]);
+    let o = run_cmd(c, None)?;
+    if !o.ok {
+        return Err(format!("curl lỗi: {}", o.stderr));
+    }
+    Ok(o.stdout)
+}
+
+/// Mọi chuỗi dạng `<prefix>X.Y.Z<suffix>` trong văn bản, theo thứ tự xuất hiện, không trùng.
+fn scan_versions(text: &str, prefix: &str, suffix: &str) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    let mut rest = text;
+    while let Some(i) = rest.find(prefix) {
+        let after = &rest[i + prefix.len()..];
+        let ver: String = after.chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect();
+        let tail = &after[ver.len()..];
+        let parts: Vec<&str> = ver.split('.').collect();
+        if parts.len() == 3 && parts.iter().all(|p| !p.is_empty()) && tail.starts_with(suffix) && !out.contains(&ver) {
+            out.push(ver);
+        }
+        rest = after;
+    }
+    out
+}
+
+fn vkey(v: &str) -> (u32, u32, u32) {
+    let mut p = v.split('.').map(|x| x.parse::<u32>().unwrap_or(0));
+    (p.next().unwrap_or(0), p.next().unwrap_or(0), p.next().unwrap_or(0))
+}
+
+fn ver_item(v: &str, label: &str) -> serde_json::Value {
+    serde_json::json!({ "v": v, "label": label })
+}
+
+fn ver_docker() -> Result<Vec<serde_json::Value>, String> {
+    let html = http_get("https://download.docker.com/linux/static/stable/x86_64/")?;
+    let mut vs = scan_versions(&html, "docker-", ".tgz");
+    vs.sort_by(|a, b| vkey(b).cmp(&vkey(a)));
+    let mut out = vec![ver_item("", "Mới nhất (stable)")];
+    let mut majors: Vec<u32> = vec![];
+    for v in vs {
+        let m = vkey(&v).0;
+        if majors.contains(&m) {
+            continue;
+        }
+        majors.push(m);
+        out.push(ver_item(&v, &v));
+        if majors.len() >= 4 {
+            break;
+        }
+    }
+    if out.len() < 2 {
+        return Err("Không đọc được danh sách phiên bản Docker".into());
+    }
+    Ok(out)
+}
+
+fn ver_postgres() -> Result<Vec<serde_json::Value>, String> {
+    let body = http_get("https://www.postgresql.org/versions.json")?;
+    let v: serde_json::Value = serde_json::from_str(&body).map_err(|_| "Định dạng versions.json không đúng".to_string())?;
+    let arr = v.as_array().ok_or("Định dạng versions.json không đúng")?;
+    let mut items: Vec<(u32, String)> = vec![];
+    for e in arr {
+        let s = |k: &str| {
+            e[k].as_str().map(str::to_string).or_else(|| e[k].as_u64().map(|n| n.to_string())).unwrap_or_default()
+        };
+        if e["supported"].as_bool() == Some(false) {
+            continue;
+        }
+        let (major, minor) = (s("major"), s("latestMinor"));
+        if let Ok(m) = major.parse::<u32>() {
+            if m >= 10 {
+                let full = if minor.is_empty() { major.clone() } else { format!("{major}.{minor}") };
+                items.push((m, full));
+            }
+        }
+    }
+    items.sort_by(|a, b| b.0.cmp(&a.0));
+    items.truncate(5);
+    if items.is_empty() {
+        return Err("Không đọc được danh sách phiên bản PostgreSQL".into());
+    }
+    Ok(items.iter().map(|(m, full)| ver_item(&m.to_string(), &format!("{m} · {full}"))).collect())
+}
+
+fn ver_redis() -> Result<Vec<serde_json::Value>, String> {
+    let body = http_get("https://api.github.com/repos/redis/redis/releases?per_page=100")?;
+    let v: serde_json::Value = serde_json::from_str(&body).map_err(|_| "Phản hồi GitHub không đúng định dạng".to_string())?;
+    let arr = v.as_array().ok_or("GitHub từ chối hoặc giới hạn tần suất truy vấn")?;
+    let mut vs: Vec<String> = arr
+        .iter()
+        .filter(|e| e["prerelease"].as_bool() != Some(true))
+        .filter_map(|e| e["tag_name"].as_str())
+        .filter(|s| {
+            let p: Vec<&str> = s.split('.').collect();
+            p.len() == 3 && p.iter().all(|x| !x.is_empty() && x.chars().all(|c| c.is_ascii_digit()))
+        })
+        .map(str::to_string)
+        .collect();
+    vs.sort_by(|a, b| vkey(b).cmp(&vkey(a)));
+    let mut out = vec![ver_item("", "Mới nhất")];
+    let mut lines: Vec<(u32, u32)> = vec![];
+    for v in vs {
+        let k = vkey(&v);
+        if lines.contains(&(k.0, k.1)) {
+            continue;
+        }
+        lines.push((k.0, k.1));
+        out.push(ver_item(&v, &v));
+        if lines.len() >= 4 {
+            break;
+        }
+    }
+    if out.len() < 2 {
+        return Err("Không đọc được danh sách phiên bản Redis".into());
+    }
+    Ok(out)
+}
+
+fn ver_nginx() -> Result<Vec<serde_json::Value>, String> {
+    let html = http_get("https://nginx.org/en/download.html")?;
+    let vs = scan_versions(&html, "nginx-", ".tar.gz");
+    // quy ước của nginx: số phụ lẻ = mainline, số phụ chẵn = stable
+    let mainline = vs.iter().find(|v| vkey(v).1 % 2 == 1);
+    let stable = vs.iter().find(|v| vkey(v).1 % 2 == 0);
+    match (stable, mainline) {
+        (Some(s), Some(m)) => Ok(vec![
+            ver_item("stable", &format!("stable · {s}")),
+            ver_item("mainline", &format!("mainline · {m}")),
+        ]),
+        _ => Err("Không đọc được danh sách phiên bản Nginx".into()),
+    }
+}
+
+/// Lấy danh sách phiên bản đang phát hành của từng ứng dụng trực tiếp từ nguồn chính thức.
+/// Ứng dụng nào lỗi thì có mặt trong `errors`, giao diện sẽ dùng danh sách dự phòng cho ứng dụng đó.
+#[tauri::command]
+async fn deploy_versions() -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let jobs: Vec<(&str, std::thread::JoinHandle<Result<Vec<serde_json::Value>, String>>)> = vec![
+            ("docker", std::thread::spawn(ver_docker)),
+            ("postgres", std::thread::spawn(ver_postgres)),
+            ("redis", std::thread::spawn(ver_redis)),
+            ("nginx", std::thread::spawn(ver_nginx)),
+        ];
+        let mut versions = serde_json::Map::new();
+        let mut errors = serde_json::Map::new();
+        for (name, h) in jobs {
+            match h.join() {
+                Ok(Ok(list)) => {
+                    versions.insert(name.to_string(), serde_json::Value::Array(list));
+                }
+                Ok(Err(e)) => {
+                    errors.insert(name.to_string(), serde_json::Value::String(e));
+                }
+                Err(_) => {
+                    errors.insert(name.to_string(), serde_json::Value::String("Lỗi nội bộ".into()));
+                }
+            }
+        }
+        Ok(serde_json::json!({ "versions": versions, "errors": errors }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Chạy một script cài đặt trong terminal: trên máy này (macOS/Linux) hoặc trên SSH host.
 /// Script được truyền nguyên văn; giao diện luôn hiển thị nó cho người dùng xem và xác nhận trước.
 #[tauri::command]
@@ -3321,7 +3491,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             user_home, get_stats, get_security, set_security, reveal_passphrase, backup_export, backup_inspect, backup_import, ssh_keygen, ssh_public_key, open_url, rules_list, rules_save, rules_delete, rules_sync, reveal_secret, reveal_password, list_hosts, save_host, delete_host, sftp_list, sftp_download, sftp_upload, sftp_mkdir, sftp_rename, sftp_remove, term_open,
-            deploy_run, deploy_detect, term_write, term_resize, term_close,
+            deploy_run, deploy_detect, deploy_versions, term_write, term_resize, term_close,
             list_profiles,
             save_profile,
             delete_profile,

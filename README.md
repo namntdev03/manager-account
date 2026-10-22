@@ -31,7 +31,7 @@
 - **ArgoCD**: lưu địa chỉ và account token (nên tạo token riêng, quyền tối thiểu). Bấm dùng ghi `~/.config/argocd/config`, mỗi tài khoản là một context. Test gọi `/api/v1/session/userinfo`. Nếu ArgoCD không mở ra ngoài, dùng `https://localhost:8080` sau `kubectl port-forward` và bật tuỳ chọn chứng chỉ tự ký.
 - **Docker registry**: Docker Hub, GHCR hoặc registry riêng: lưu địa chỉ, username và access token. Bấm dùng chạy `docker login`. Test gọi `auth.docker.io` (Docker Hub) hoặc `<registry>/v2/`.
 - **Harbor**: lưu địa chỉ, username (nên dùng robot account) và mật khẩu/secret. Bấm dùng chạy `docker login`. Test gọi `/api/v2.0/projects`.
-- **Deployment**: cài Docker, PostgreSQL, Redis, Nginx lên máy này (macOS/Linux) hoặc một SSH host (Debian/Ubuntu, RHEL/Rocky/Alma). Chọn phiên bản, app hiển thị **toàn bộ script** rồi chạy trong terminal của app (qua `ssh -t`, bạn thấy từng dòng và nhập được mật khẩu sudo). Script tự kiểm tra hệ điều hành, ổ đĩa, cổng đang bị chiếm và hỏi lại `[y/N]` trước khi cài. Với server từ xa phải gõ lại tên server để xác nhận. Script thêm repo gói chính thức (PGDG, packages.redis.io, nginx.org, get.docker.com) và cần quyền sudo; việc tải gói do máy đích thực hiện. Kubernetes, Calico, ArgoCD, Harbor sẽ có sau.
+- **Deployment**: cài Docker, PostgreSQL, Redis, Nginx lên máy này (macOS/Linux) hoặc một SSH host (Debian/Ubuntu, RHEL/Rocky/Alma). Danh sách phiên bản lấy trực tiếp từ nguồn chính thức (có danh sách dự phòng trong app nếu không có mạng). Chọn phiên bản, app hiển thị **toàn bộ script** rồi chạy trong terminal của app (qua `ssh -t`, bạn thấy từng dòng và nhập được mật khẩu sudo). Script tự kiểm tra hệ điều hành, ổ đĩa, cổng đang bị chiếm và hỏi lại `[y/N]` trước khi cài. Với server từ xa phải gõ lại tên server để xác nhận. Script thêm repo gói chính thức (PGDG, packages.redis.io, nginx.org, get.docker.com) và cần quyền sudo; việc tải gói do máy đích thực hiện. Kubernetes, Calico, ArgoCD, Harbor sẽ có sau.
 - **Hiệu năng**: RAM, CPU và số phiên SSH mà chính app đang dùng.
 - **Ngôn ngữ**: Tiếng Việt và English (Cài đặt → Ngôn ngữ; mặc định theo ngôn ngữ hệ thống). Thêm ngôn ngữ mới: thêm một bảng trong `src/i18n.js`.
 
@@ -45,8 +45,9 @@
      `api.github.com/repos/namntdev03/manager-account/releases/latest`, không gửi dữ liệu nào của bạn.
   2. **Bạn bấm “Cập nhật ngay”**: tải file từ GitHub Releases của dự án, kiểm tra chữ ký số (minisign) trước khi cài.
   3. **Bạn bấm “Test kết nối”**: SSH tới `git@<host>`, gọi API của GitHub/GitLab, npm registry, ArgoCD, Harbor hoặc `kubectl get --raw /version` tới cluster, chỉ tới đúng nền tảng hoặc máy chủ của tài khoản đó.
-  4. **Bạn mở terminal hoặc quản lý file của một SSH host**: kết nối SSH tới chính máy chủ đó.
-  5. **Bạn bấm “Mở trang thêm key”**: app mở trình duyệt tới trang SSH key của GitHub/GitLab, không gửi gì kèm theo.
+  4. **Bạn mở menu Deployment hoặc bấm “Kiểm tra lại”**: app tra danh sách phiên bản công khai tại `download.docker.com`, `www.postgresql.org`, `api.github.com` (Redis) và `nginx.org`. Không gửi dữ liệu nào của bạn ngoài địa chỉ IP.
+  5. **Bạn mở terminal hoặc quản lý file của một SSH host**: kết nối SSH tới chính máy chủ đó.
+  6. **Bạn bấm “Mở trang thêm key”**: app mở trình duyệt tới trang SSH key của GitHub/GitLab, không gửi gì kèm theo.
 - App không bao giờ gửi tên, email, token, mật khẩu, key, danh sách tài khoản/host hay đường dẫn repo tới bất kỳ đâu.
 - `git push/pull` do chính git thực hiện, không đi qua app.
 - **Kho lưu trữ**: file sao lưu chứa mọi bí mật và được mã hoá bằng mật khẩu bạn đặt. App không giữ mật khẩu đó và không tự tải file đi đâu; mất mật khẩu thì không mở lại được file.
