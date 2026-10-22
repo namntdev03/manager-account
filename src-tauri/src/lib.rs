@@ -1820,6 +1820,47 @@ fn spawn_pty(app: &tauri::AppHandle, mut cmd: CommandBuilder, cols: u16, rows: u
     Ok(id)
 }
 
+const DETECT_SCRIPT: &str = r#"export PATH="$PATH:/usr/local/bin:/opt/homebrew/bin:/usr/sbin:/snap/bin"
+for d in /usr/pgsql-*/bin /usr/lib/postgresql/*/bin /opt/homebrew/opt/postgresql@*/bin; do [ -d "$d" ] && PATH="$PATH:$d"; done
+v() { if command -v "$1" >/dev/null 2>&1; then "$@" 2>&1 | head -1; fi; }
+echo "docker=$(v docker --version)"
+echo "postgres=$(v psql --version)"
+echo "redis=$(v redis-server --version)"
+echo "nginx=$(v nginx -v)"
+"#;
+
+/// Kiểm tra các ứng dụng đã được cài trên máy đích chưa (và phiên bản nào). Trả về các dòng `tên=chuỗi phiên bản`.
+#[tauri::command]
+async fn deploy_detect(
+    app: tauri::AppHandle,
+    host_id: Option<String>,
+    account_id: Option<String>,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || match host_id.filter(|s| !s.is_empty()) {
+        Some(hid) => {
+            let cmd = format!("sh -c {}", sh_quote(DETECT_SCRIPT));
+            let out = remote_run(&app, &hid, account_id.as_deref().unwrap_or(""), &cmd, None, None)?;
+            Ok(String::from_utf8_lossy(&out).to_string())
+        }
+        None => {
+            #[cfg(windows)]
+            {
+                let _ = &app;
+                return Err("Windows chưa hỗ trợ kiểm tra trực tiếp trên máy này.".to_string());
+            }
+            #[cfg(not(windows))]
+            {
+                let mut c = new_cmd("sh");
+                c.args(["-c", DETECT_SCRIPT]);
+                let o = run_cmd(c, None)?;
+                return Ok(o.stdout);
+            }
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Chạy một script cài đặt trong terminal: trên máy này (macOS/Linux) hoặc trên SSH host.
 /// Script được truyền nguyên văn; giao diện luôn hiển thị nó cho người dùng xem và xác nhận trước.
 #[tauri::command]
@@ -3280,7 +3321,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             user_home, get_stats, get_security, set_security, reveal_passphrase, backup_export, backup_inspect, backup_import, ssh_keygen, ssh_public_key, open_url, rules_list, rules_save, rules_delete, rules_sync, reveal_secret, reveal_password, list_hosts, save_host, delete_host, sftp_list, sftp_download, sftp_upload, sftp_mkdir, sftp_rename, sftp_remove, term_open,
-            deploy_run, term_write, term_resize, term_close,
+            deploy_run, deploy_detect, term_write, term_resize, term_close,
             list_profiles,
             save_profile,
             delete_profile,

@@ -896,6 +896,7 @@
       if (!x && dep.id && dep.id === (ev.payload || {}).id) {
         dep.ended = true;
         dep.term.write(`\r\n\x1b[90m[${t("Đã kết thúc. Bạn có thể đóng cửa sổ này.")}]\x1b[0m\r\n`);
+        depDetect(true);
         return;
       }
       if (!x) return;
@@ -915,6 +916,55 @@
   const depTarget = () => $('[data-sel="dep_target"]').dataset.value || "";
   const depAcc = () => $('[data-sel="dep_acc"]').dataset.value || "";
   const depHost = () => S.hosts.find((h) => h.id === depTarget());
+  // trạng thái cài đặt trên máy đích: { key, loading, err, ver: { docker: "29.7.2" | null, ... } }
+  const depSt = { key: null, loading: false, err: "", ver: {} };
+  const depVerOf = (line) => {
+    const m = /(\d+\.\d+(?:\.\d+)?)/.exec(line || "");
+    return m ? m[1] : "";
+  };
+  async function depDetect(force) {
+    const key = depTarget() + "|" + (depTarget() ? depAcc() : "");
+    if (!force && depSt.key === key) return;
+    depSt.key = key;
+    depSt.loading = true;
+    depSt.err = "";
+    depSt.ver = {};
+    renderDepGrid();
+    try {
+      const out = await invoke("deploy_detect", { hostId: depTarget() || null, accountId: depTarget() ? depAcc() || null : null });
+      if (depSt.key !== key) return; // người dùng đã đổi máy đích
+      out.split("\n").forEach((l) => {
+        const i = l.indexOf("=");
+        if (i > 0) depSt.ver[l.slice(0, i).trim()] = depVerOf(l.slice(i + 1));
+      });
+    } catch (e) {
+      if (depSt.key === key) depSt.err = tr(e);
+    }
+    if (depSt.key === key) {
+      depSt.loading = false;
+      renderDepGrid();
+    }
+  }
+  function depBadge(id) {
+    if (depSt.loading) return `<span class="dep-st">${t("Đang kiểm tra…")}</span>`;
+    if (depSt.err) return `<span class="dep-st">${t("Chưa kiểm tra được")}</span>`;
+    const v = depSt.ver[id];
+    return v
+      ? `<span class="dep-st ok"><i class="st live"></i>${t("Đã cài")} · ${esc(v)}</span>`
+      : `<span class="dep-st">${t("Chưa cài")}</span>`;
+  }
+  function renderDepGrid() {
+    const apps = DEPLOY.APPS.map(
+      (a) => `<button type="button" class="dep-app" data-app="${esc(a.id)}">
+        <span class="dep-ic">${platIcon({ id: a.logo })}</span><b>${esc(a.name)}</b>${depBadge(a.id)}<span class="d">${esc(t(a.desc))}</span></button>`
+    );
+    const soon = DEPLOY.SOON.map(
+      (a) => `<div class="dep-app soon"><span class="dep-ic">${a.logo ? platIcon({ id: a.logo }) : icon("server")}</span><b>${esc(a.name)}</b><span class="tag-soon">${t("Sắp có")}</span></div>`
+    );
+    $("#depGrid").innerHTML = apps.concat(soon).join("");
+    $("#depErrNote").hidden = !depSt.err;
+    $("#depErrNote").textContent = depSt.err;
+  }
   function renderDeploy() {
     closeSel();
     const accs = S.profiles.filter((p) => p.kind === "ssh");
@@ -937,18 +987,13 @@
       : /Win/i.test(navigator.platform)
         ? t("Windows chưa hỗ trợ cài trực tiếp trên máy này. Hãy chọn một SSH host (Linux).")
         : t("Cài trực tiếp lên máy đang dùng app (macOS dùng Homebrew, Linux dùng apt/dnf).");
-    const apps = DEPLOY.APPS.map(
-      (a) => `<button type="button" class="dep-app" data-app="${esc(a.id)}">
-        <span class="dep-ic">${platIcon({ id: a.logo })}</span><b>${esc(a.name)}</b><span class="d">${esc(t(a.desc))}</span></button>`
-    );
-    const soon = DEPLOY.SOON.map(
-      (a) => `<div class="dep-app soon"><span class="dep-ic">${a.logo ? platIcon({ id: a.logo }) : icon("server")}</span><b>${esc(a.name)}</b><span class="tag-soon">${t("Sắp có")}</span></div>`
-    );
-    $("#depGrid").innerHTML = apps.concat(soon).join("");
+    renderDepGrid();
+    depDetect(false);
   }
   $("#page-deploy").addEventListener("click", (e) => {
     const sel = e.target.closest(".sel");
     if (sel) return openSel(sel);
+    if (e.target.closest("#depRecheck")) return depDetect(true);
     const b = e.target.closest("[data-app]");
     if (b) openDepDlg(b.dataset.app);
   });
@@ -971,6 +1016,9 @@
     $("#depConfirmLbl").hidden = !h;
     if (h) $("#depConfirmTxt").textContent = t("Gõ tên server “{h}” để xác nhận", { h: h.name });
     $("#depErr").hidden = true;
+    const cur = depSt.ver[dep.app.id];
+    $("#depInstalled").hidden = !cur;
+    if (cur) $("#depInstalled").textContent = t("Máy này đã cài {n} phiên bản {v}. Cài tiếp có thể nâng cấp hoặc ghi đè cấu hình repo.", { n: dep.app.name, v: cur });
     depRefreshScript();
     depCheckConfirm();
     $("#depDlg").showModal();

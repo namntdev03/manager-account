@@ -128,6 +128,11 @@
     "Chạy việc lâu trên server nên dùng <code>tmux</code> hoặc <code>screen</code> để không bị mất khi đóng phiên.": "For long-running work on a server, use <code>tmux</code> or <code>screen</code> so it is not lost when the session closes.",
     "Ẩn / hiện hướng dẫn": "Hide / show the guide",
     // ── quản lý file
+    "Kiểm tra lại": "Check again",
+    "Chưa kiểm tra được": "Could not check",
+    "Đã cài": "Installed",
+    "Chưa cài": "Not installed",
+    "Máy này đã cài {n} phiên bản {v}. Cài tiếp có thể nâng cấp hoặc ghi đè cấu hình repo.": "{n} {v} is already installed here. Installing again may upgrade it or overwrite the repository configuration.",
     "<b>Deployment.</b> Cài Docker, PostgreSQL, Redis, Nginx lên máy này hoặc một server qua SSH: chọn phiên bản, xem trước toàn bộ script, rồi chạy trong terminal của app.": "<b>Deployment.</b> Install Docker, PostgreSQL, Redis and Nginx on this machine or a server over SSH: pick a version, review the full script first, then run it in the app's terminal.",
     "<b>Deployment:</b> khi bạn bấm “Bắt đầu cài”, script hiển thị trước đó được chạy trên máy này hoặc trên server bạn chọn (có thể thêm repo gói và cài phần mềm, cần quyền sudo). Server production phải gõ lại tên để xác nhận.": "<b>Deployment:</b> when you click “Start installation”, the script shown beforehand runs on this machine or on the server you chose (it may add package repositories and install software, and needs sudo). A production server must be confirmed by typing its name.",
     "Bắt đầu cài": "Start installation",

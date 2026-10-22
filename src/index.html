@@ -112,6 +112,8 @@
           </div>
         </div>
         <div class="dep-note" id="depNote"></div>
+        <div class="dep-note dep-err" id="depErrNote" hidden></div>
+        <button type="button" class="dep-re" id="depRecheck">Kiểm tra lại</button>
       </div>
       <div class="cards dep-grid" id="depGrid"></div>
     </section>
@@ -444,6 +446,7 @@
       <p id="depSub"></p>
     </div>
     <div class="dlg-body">
+      <p class="hint" id="depInstalled" hidden></p>
       <label>Phiên bản
         <div class="seg" id="depVer"></div>
       </label>
