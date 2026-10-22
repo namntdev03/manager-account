@@ -1,6 +1,6 @@
 [package]
 name = "manager-account"
-version = "0.2.3"
+version = "0.2.4"
 description = "Chuyển nhanh giữa nhiều tài khoản Git"
 edition = "2021"
 
