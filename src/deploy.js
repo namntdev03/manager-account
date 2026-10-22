@@ -174,7 +174,7 @@ echo "Hoàn tất cài Nginx."
     {
       id: "postgres", name: "PostgreSQL", logo: "postgres", os: OS,
       desc: "Cơ sở dữ liệu PostgreSQL từ repo chính thức PGDG",
-      versions: [{ v: "17", label: "17" }, { v: "16", label: "16" }, { v: "15", label: "15" }, { v: "14", label: "14" }],
+      versions: [{ v: "18", label: "18" }, { v: "17", label: "17" }, { v: "16", label: "16" }, { v: "15", label: "15" }, { v: "14", label: "14" }],
       script: POSTGRES,
     },
     {
