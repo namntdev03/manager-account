@@ -8,7 +8,11 @@ echo "=== Kiểm tra trước khi cài ==="
 echo "Máy: $(hostname) | User: $(whoami) | Hệ điều hành: $(uname -sr)"
 if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi
 case "$(uname -s)" in
-  Darwin) PM=brew ;;
+  Darwin)
+    for b in /opt/homebrew/bin /usr/local/bin; do
+      if [ -x "$b/brew" ]; then PATH="$PATH:$b"; fi
+    done
+    if command -v brew >/dev/null 2>&1; then PM=brew; else PM=mac; fi ;;
   Linux)
     if command -v apt-get >/dev/null 2>&1; then PM=apt
     elif command -v dnf >/dev/null 2>&1; then PM=dnf
@@ -17,9 +21,8 @@ case "$(uname -s)" in
   *) echo "Hệ điều hành này chưa được hỗ trợ."; exit 1 ;;
 esac
 echo "Trình quản lý gói: $PM"
-if [ "$PM" = brew ]; then
-  command -v brew >/dev/null 2>&1 || { echo "Cần cài Homebrew trước: https://brew.sh"; exit 1; }
-elif [ -n "$SUDO" ]; then
+if [ "$PM" = mac ]; then echo "(macOS không có Homebrew: chỉ làm được những việc không cần Homebrew)"; fi
+if [ "$PM" != brew ] && [ "$PM" != mac ] && [ -n "$SUDO" ]; then
   command -v sudo >/dev/null 2>&1 || { echo "Cần quyền root hoặc sudo."; exit 1; }
 fi
 df -h / | tail -1 | awk '{print "Ổ đĩa /: còn " $4 " (" $5 " đã dùng)"}'
@@ -33,7 +36,13 @@ confirm() {
   read -r ans
   case "$ans" in y|Y) ;; *) echo "Đã huỷ, chưa thay đổi gì."; exit 1 ;; esac
 }
-if [ "$PM" = brew ]; then SUDO_RM=""; BP="$(brew --prefix)"; else SUDO_RM="$SUDO"; BP=""; fi
+SUDO_RM="$SUDO"; BP=""; HAS_BREW=0; HAS_PORT=0
+if [ "$PM" = brew ]; then SUDO_RM=""; BP="$(brew --prefix)"; HAS_BREW=1; fi
+if [ "$PM" = mac ]; then SUDO_RM=""; fi
+if command -v port >/dev/null 2>&1; then HAS_PORT=1; fi
+brew_has() { if [ "$HAS_BREW" = 1 ] && brew list --formula "$1" >/dev/null 2>&1; then return 0; fi; return 1; }
+brew_cask() { if [ "$HAS_BREW" = 1 ] && brew list --cask "$1" >/dev/null 2>&1; then return 0; fi; return 1; }
+port_has() { if [ "$HAS_PORT" = 1 ] && [ -n "$(port -q installed "$1" 2>/dev/null)" ]; then return 0; fi; return 1; }
 confirm_del() {
   printf "ĐÂY LÀ XOÁ VĨNH VIỄN, không khôi phục được. Gõ XOA để tiếp tục: "
   read -r ans
@@ -56,6 +65,11 @@ echo
 `;
 
   const DOCKER = String.raw`DV="@VERSION@"
+if [ "$PM" = mac ]; then
+  echo "Máy chưa có Homebrew nên chưa cài Docker tự động được."
+  echo "Hãy cài Homebrew (https://brew.sh) rồi chạy lại, hoặc dùng bản cài chính thức của ứng dụng."
+  exit 1
+fi
 if command -v docker >/dev/null 2>&1; then echo "Docker đã được cài: $(docker --version)"; fi
 confirm
 if [ "$PM" = brew ]; then
@@ -80,6 +94,11 @@ echo "Hoàn tất cài Docker."
 `;
 
   const POSTGRES = String.raw`PGV="@VERSION@"
+if [ "$PM" = mac ]; then
+  echo "Máy chưa có Homebrew nên chưa cài PostgreSQL tự động được."
+  echo "Hãy cài Homebrew (https://brew.sh) rồi chạy lại, hoặc dùng bản cài chính thức của ứng dụng."
+  exit 1
+fi
 port_check 5432
 if command -v psql >/dev/null 2>&1; then echo "Đã có PostgreSQL: $(psql --version)"; fi
 confirm
@@ -111,6 +130,7 @@ echo "Không mở cổng 5432 ra internet nếu không cần."
 
   const REDIS = String.raw`RV="@VERSION@"
 METHOD="@METHOD@"
+if [ "$PM" = mac ]; then METHOD=source; fi
 port_check 6379
 if command -v redis-server >/dev/null 2>&1; then echo "Đã có Redis: $(redis-server --version)"; fi
 confirm
@@ -136,7 +156,7 @@ case "$PM" in
     $SUDO $PM install -y redis
     $SUDO systemctl enable --now redis
     ;;
-  brew)
+  brew|mac)
     if [ "$METHOD" = source ]; then
       xcode-select -p >/dev/null 2>&1 || { echo "Cần Xcode Command Line Tools: chạy xcode-select --install rồi thử lại."; exit 1; }
       if [ -z "$RV" ]; then
@@ -175,6 +195,11 @@ echo "Không mở cổng 6379 ra internet. Nếu cần truy cập từ xa hãy �
 `;
 
   const NGINX = String.raw`NV="@VERSION@"
+if [ "$PM" = mac ]; then
+  echo "Máy chưa có Homebrew nên chưa cài Nginx tự động được."
+  echo "Hãy cài Homebrew (https://brew.sh) rồi chạy lại, hoặc dùng bản cài chính thức của ứng dụng."
+  exit 1
+fi
 port_check 80
 if command -v nginx >/dev/null 2>&1; then echo "Đã có Nginx: $(nginx -v 2>&1)"; fi
 confirm
@@ -215,8 +240,10 @@ else
 fi
 echo "Sẽ xoá:"
 case "$PM" in
-  brew)
-    echo "  - Docker Desktop (brew cask docker, kèm --zap)"
+  brew|mac)
+    if brew_cask docker; then echo "  - Docker Desktop (Homebrew cask, kèm --zap)"; fi
+    if brew_has docker; then echo "  - công cụ dòng lệnh docker (Homebrew)"; fi
+    show_path /Applications/Docker.app
     show_path "$HOME/.docker"
     show_path "$HOME/Library/Containers/com.docker.docker"
     show_path "$HOME/Library/Group Containers/group.com.docker"
@@ -231,10 +258,18 @@ case "$PM" in
 esac
 confirm_del
 case "$PM" in
-  brew)
+  brew|mac)
     osascript -e 'quit app "Docker"' >/dev/null 2>&1 || true
     sleep 3
-    brew uninstall --cask --zap docker || echo "Không gỡ được bằng brew (có thể chưa cài qua brew)."
+    if brew_cask docker; then brew uninstall --cask --zap docker || echo "Không gỡ được cask docker bằng brew."; fi
+    if brew_has docker; then brew uninstall --force docker || echo "Không gỡ được formula docker bằng brew."; fi
+    rmp /Applications/Docker.app
+    for l in /usr/local/bin/*; do
+      if [ -L "$l" ] && readlink "$l" | grep -q "Docker.app"; then
+        echo "  xoá liên kết $l"
+        rm -f "$l" 2>/dev/null || $SUDO rm -f "$l"
+      fi
+    done
     rmp "$HOME/.docker" "$HOME/Library/Containers/com.docker.docker" "$HOME/Library/Group Containers/group.com.docker" "$HOME/Library/Application Support/Docker Desktop"
     ;;
   apt)
@@ -255,8 +290,9 @@ echo "Đã gỡ Docker và xoá dữ liệu. Nhóm người dùng 'docker' (nế
 `;
 
   const POSTGRES_UN = String.raw`echo "=== Gỡ PostgreSQL và xoá sạch dữ liệu ==="
-echo "Sẽ xoá TOÀN BỘ PostgreSQL trên máy này (mọi phiên bản) cùng MỌI cơ sở dữ liệu. Hãy chắc chắn đã sao lưu (pg_dump)."
+echo "Sẽ xoá TOÀN BỘ PostgreSQL trên máy này (mọi phiên bản, mọi cách cài) cùng MỌI cơ sở dữ liệu. Hãy chắc chắn đã sao lưu (pg_dump)."
 PK=""
+PORTPK=""
 case "$PM" in
   apt)
     PK="$(dpkg -l | awk '/^ii/ {print $2}' | grep -E '^postgresql' || true)"
@@ -271,14 +307,22 @@ case "$PM" in
     show_path /var/lib/pgsql
     for d in /usr/pgsql-*; do show_path "$d"; done
     ;;
-  brew)
-    PK="$(brew list --formula 2>/dev/null | grep -E '^postgresql(@[0-9]+)?$' || true)"
-    echo "Formula: $PK"
-    for f in $PK; do show_path "$BP/var/$f"; done
-    show_path "$BP/var/postgres"
+  brew|mac)
+    if [ "$HAS_BREW" = 1 ]; then
+      PK="$(brew list --formula 2>/dev/null | grep -E '^postgresql(@[0-9]+)?$' || true)"
+      if [ -n "$PK" ]; then echo "Formula Homebrew: $PK"; fi
+      for f in $PK; do show_path "$BP/var/$f"; done
+      show_path "$BP/var/postgres"
+    fi
+    if [ "$HAS_PORT" = 1 ]; then
+      PORTPK="$(port -q installed 2>/dev/null | awk '{print $1}' | grep -E '^postgresql' | sort -u || true)"
+      if [ -n "$PORTPK" ]; then echo "Gói MacPorts: $PORTPK"; fi
+      for d in /opt/local/var/db/postgresql*; do show_path "$d"; done
+    fi
+    show_path /Applications/Postgres.app
+    show_path "$HOME/Library/Application Support/Postgres"
     ;;
 esac
-if [ -z "$PK" ]; then echo "Không thấy gói PostgreSQL nào được cài."; fi
 confirm_del
 case "$PM" in
   apt)
@@ -295,13 +339,22 @@ case "$PM" in
     for d in /usr/pgsql-*; do rmp "$d"; done
     $SUDO userdel postgres 2>/dev/null || true
     ;;
-  brew)
+  brew|mac)
     for f in $PK; do
       brew services stop "$f" || true
       brew uninstall --force "$f" || echo "Không gỡ được $f (có gói khác phụ thuộc?)."
       rmp "$BP/var/$f"
     done
-    rmp "$BP/var/postgres"
+    if [ "$HAS_BREW" = 1 ]; then rmp "$BP/var/postgres"; fi
+    if [ -n "$PORTPK" ]; then
+      $SUDO port -N uninstall $PORTPK || echo "Không gỡ được một số gói MacPorts."
+      for d in /opt/local/var/db/postgresql*; do rmp "$d"; done
+    fi
+    if [ -d /Applications/Postgres.app ]; then
+      osascript -e 'quit app "Postgres"' >/dev/null 2>&1 || true
+      sleep 2
+      rmp /Applications/Postgres.app "$HOME/Library/Application Support/Postgres"
+    fi
     ;;
 esac
 echo "Đã gỡ PostgreSQL và xoá dữ liệu."
@@ -321,11 +374,15 @@ case "$PM" in
     show_path /etc/redis.conf
     show_path /var/log/redis
     ;;
-  brew)
-    show_path "$BP/var/db/redis"
-    show_path "$BP/etc/redis.conf"
-    show_path "$BP/etc/redis-sentinel.conf"
-    show_path "$BP/var/log/redis.log"
+  brew|mac)
+    if brew_has redis; then
+      echo "  - Redis (Homebrew)"
+      show_path "$BP/var/db/redis"
+      show_path "$BP/etc/redis.conf"
+      show_path "$BP/etc/redis-sentinel.conf"
+      show_path "$BP/var/log/redis.log"
+    fi
+    if port_has redis; then echo "  - Redis (MacPorts)"; show_path /opt/local/var/db/redis; fi
     show_path "$HOME/.local/redis"
     ;;
 esac
@@ -343,11 +400,18 @@ case "$PM" in
     if rpm -q redis >/dev/null 2>&1; then $SUDO $PM remove -y redis; fi
     rmp /var/lib/redis /etc/redis /etc/redis.conf /etc/redis-sentinel.conf /var/log/redis
     ;;
-  brew)
-    brew services stop redis || true
-    brew uninstall --force redis || echo "Không gỡ được redis bằng brew."
+  brew|mac)
+    if brew_has redis; then
+      brew services stop redis || true
+      brew uninstall --force redis || echo "Không gỡ được redis bằng brew."
+      rmp "$BP/var/db/redis" "$BP/etc/redis.conf" "$BP/etc/redis-sentinel.conf" "$BP/var/log/redis.log"
+    fi
+    if port_has redis; then
+      $SUDO port -N uninstall redis || echo "Không gỡ được redis bằng MacPorts."
+      rmp /opt/local/var/db/redis
+    fi
     pkill -f "$HOME/.local/redis" 2>/dev/null || true
-    rmp "$BP/var/db/redis" "$BP/etc/redis.conf" "$BP/etc/redis-sentinel.conf" "$BP/var/log/redis.log" "$HOME/.local/redis"
+    rmp "$HOME/.local/redis"
     ;;
 esac
 echo "Đã gỡ Redis và xoá dữ liệu."
@@ -357,9 +421,9 @@ echo "Đã gỡ Redis và xoá dữ liệu."
 echo "Thư mục web của bạn (ví dụ /var/www) KHÔNG bị xoá."
 echo "Sẽ xoá:"
 case "$PM" in
-  brew)
-    show_path "$BP/etc/nginx"
-    show_path "$BP/var/log/nginx"
+  brew|mac)
+    if brew_has nginx; then echo "  - Nginx (Homebrew)"; show_path "$BP/etc/nginx"; show_path "$BP/var/log/nginx"; fi
+    if port_has nginx; then echo "  - Nginx (MacPorts)"; show_path /opt/local/etc/nginx; show_path /opt/local/var/log/nginx; fi
     ;;
   *)
     show_path /etc/nginx
@@ -381,10 +445,16 @@ case "$PM" in
     if rpm -q nginx >/dev/null 2>&1; then $SUDO $PM remove -y nginx; fi
     rmp /etc/nginx /var/log/nginx /var/cache/nginx /etc/yum.repos.d/nginx.repo
     ;;
-  brew)
-    brew services stop nginx || true
-    brew uninstall --force nginx || echo "Không gỡ được nginx bằng brew."
-    rmp "$BP/etc/nginx" "$BP/var/log/nginx" "$BP/var/run/nginx.pid"
+  brew|mac)
+    if brew_has nginx; then
+      brew services stop nginx || true
+      brew uninstall --force nginx || echo "Không gỡ được nginx bằng brew."
+      rmp "$BP/etc/nginx" "$BP/var/log/nginx" "$BP/var/run/nginx.pid"
+    fi
+    if port_has nginx; then
+      $SUDO port -N uninstall nginx || echo "Không gỡ được nginx bằng MacPorts."
+      rmp /opt/local/etc/nginx /opt/local/var/log/nginx
+    fi
     ;;
 esac
 echo "Đã gỡ Nginx và xoá cấu hình."

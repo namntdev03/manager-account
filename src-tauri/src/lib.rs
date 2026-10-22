@@ -1820,14 +1820,39 @@ fn spawn_pty(app: &tauri::AppHandle, mut cmd: CommandBuilder, cols: u16, rows: u
     Ok(id)
 }
 
-const DETECT_SCRIPT: &str = r#"export PATH="$PATH:/usr/local/bin:/opt/homebrew/bin:/usr/sbin:/snap/bin"
-for d in /usr/pgsql-*/bin /usr/lib/postgresql/*/bin /opt/homebrew/opt/postgresql@*/bin; do [ -d "$d" ] && PATH="$PATH:$d"; done
+const DETECT_SCRIPT: &str = r#"export PATH="$PATH:/usr/local/bin:/opt/homebrew/bin:/opt/local/bin:/usr/sbin:/snap/bin:/Applications/Postgres.app/Contents/Versions/latest/bin"
+for d in /usr/pgsql-*/bin /usr/lib/postgresql/*/bin /opt/homebrew/opt/postgresql@*/bin /opt/local/lib/postgresql*/bin; do [ -d "$d" ] && PATH="$PATH:$d"; done
 v() { if command -v "$1" >/dev/null 2>&1; then "$@" 2>&1 | head -1; fi; }
-if [ "$(uname -s)" = Darwin ]; then echo "pm=brew"; elif command -v apt-get >/dev/null 2>&1; then echo "pm=apt"; elif command -v dnf >/dev/null 2>&1; then echo "pm=dnf"; elif command -v yum >/dev/null 2>&1; then echo "pm=yum"; fi
+via() {
+  p="$(command -v "$1" 2>/dev/null || true)"
+  [ -n "$p" ] || return 0
+  r="$(readlink "$p" 2>/dev/null || true)"
+  case "$p $r" in
+    *Cellar*|*/opt/homebrew/*|*linuxbrew*) echo brew ;;
+    */opt/local/*) echo macports ;;
+    *"/.local/redis/"*) echo source ;;
+    *Docker.app*|*"/.docker/bin/"*) echo docker-desktop ;;
+    *Postgres.app*) echo postgres-app ;;
+    *)
+      if command -v dpkg >/dev/null 2>&1 && dpkg -S "$p" >/dev/null 2>&1; then echo apt
+      elif command -v rpm >/dev/null 2>&1 && rpm -qf "$p" >/dev/null 2>&1; then echo rpm
+      else echo other; fi ;;
+  esac
+}
+if [ "$(uname -s)" = Darwin ]; then
+  if command -v brew >/dev/null 2>&1; then echo "pm=brew"; else echo "pm=mac"; fi
+elif command -v apt-get >/dev/null 2>&1; then echo "pm=apt"
+elif command -v dnf >/dev/null 2>&1; then echo "pm=dnf"
+elif command -v yum >/dev/null 2>&1; then echo "pm=yum"; fi
 echo "docker=$(v docker --version)"
 echo "postgres=$(v psql --version)"
 echo "redis=$(v redis-server --version)"
 echo "nginx=$(v nginx -v)"
+echo "via_docker=$(via docker)"
+echo "via_postgres=$(via psql)"
+echo "via_redis=$(via redis-server)"
+echo "via_nginx=$(via nginx)"
+if [ -d /Applications/Docker.app ] && [ -z "$(via docker)" ]; then echo "via_docker=docker-desktop"; fi
 "#;
 
 /// Kiểm tra các ứng dụng đã được cài trên máy đích chưa (và phiên bản nào). Trả về các dòng `tên=chuỗi phiên bản`.

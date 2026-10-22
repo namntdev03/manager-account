@@ -917,7 +917,7 @@
   const depAcc = () => $('[data-sel="dep_acc"]').dataset.value || "";
   const depHost = () => S.hosts.find((h) => h.id === depTarget());
   // trạng thái cài đặt trên máy đích: { key, loading, err, ver: { docker: "29.7.2" | null, ... } }
-  const depSt = { key: null, loading: false, err: "", ver: {} };
+  const depSt = { key: null, loading: false, err: "", ver: {}, via: {}, pm: "" };
   const depVerOf = (line) => {
     const m = /(\d+\.\d+(?:\.\d+)?)/.exec(line || "");
     return m ? m[1] : "";
@@ -948,6 +948,7 @@
     depSt.loading = true;
     depSt.err = "";
     depSt.ver = {};
+    depSt.via = {};
     depSt.pm = "";
     renderDepGrid();
     try {
@@ -958,6 +959,7 @@
         if (i > 0) {
           const k = l.slice(0, i).trim();
           if (k === "pm") depSt.pm = l.slice(i + 1).trim();
+          else if (k.startsWith("via_")) { const x = l.slice(i + 1).trim(); if (x) depSt.via[k.slice(4)] = x; }
           else depSt.ver[k] = depVerOf(l.slice(i + 1));
         }
       });
@@ -969,12 +971,15 @@
       renderDepGrid();
     }
   }
+  // tên hiển thị của cách đã cài (do bước kiểm tra phát hiện)
+  const VIA_NAME = { brew: "Homebrew", macports: "MacPorts", source: "mã nguồn", "docker-desktop": "Docker Desktop", "postgres-app": "Postgres.app", apt: "apt", rpm: "dnf/yum", other: "không rõ" };
+  const depViaName = (x) => t(VIA_NAME[x] || x);
   function depBadge(id) {
     if (depSt.loading) return `<span class="dep-st">${t("Đang kiểm tra…")}</span>`;
     if (depSt.err) return `<span class="dep-st">${t("Chưa kiểm tra được")}</span>`;
     const v = depSt.ver[id];
     return v
-      ? `<span class="dep-st ok"><i class="st live"></i>${t("Đã cài")} · ${esc(v)}</span>`
+      ? `<span class="dep-st ok"><i class="st live"></i>${t("Đã cài")} · ${esc(v)}${depSt.via[id] ? " · " + esc(depViaName(depSt.via[id])) : ""}</span>`
       : `<span class="dep-st">${t("Chưa cài")}</span>`;
   }
   function renderDepGrid() {
@@ -1035,15 +1040,15 @@
     depRefreshScript();
   }
   // Máy đích là macOS (Homebrew)? Khi đó Redis có thêm lựa chọn biên dịch từ mã nguồn.
-  const depMac = () => depSt.pm === "brew";
-  const depHasMethod = () => dep.mode !== "uninstall" && depMac() && dep.app && dep.app.id === "redis";
+  const depMac = () => depSt.pm === "brew" || depSt.pm === "mac";
+  const depHasMethod = () => dep.mode !== "uninstall" && depSt.pm === "brew" && dep.app && dep.app.id === "redis";
   // Có danh sách phiên bản để chọn không?
   function depVerVisible() {
     if (dep.mode === "uninstall") return false;
     if (!depMac()) return true;
     const id = dep.app.id;
     if (id === "postgres") return true;
-    if (id === "redis") return dep.method === "source";
+    if (id === "redis") return depSt.pm === "mac" || dep.method === "source";
     return false; // docker, nginx trên macOS: Homebrew chỉ cài bản mới nhất
   }
   function depEffVer() { return depVerVisible() ? dep.ver : ""; }
@@ -1058,6 +1063,16 @@
           : t("Gỡ cài đặt sẽ xoá vĩnh viễn {n} cùng dữ liệu và cấu hình của nó trên máy này. Không khôi phục được, hãy sao lưu trước.", { n: dep.app.name }), warn: true };
     }
     if (!pm) return { txt: "", warn: false };
+    if (pm === "mac") {
+      return id === "redis"
+        ? { txt: t("Máy chưa có Homebrew nên Redis sẽ được biên dịch từ mã nguồn (cần Xcode Command Line Tools, cài vào ~/.local/redis)."), warn: false }
+        : { txt: t("Máy chưa có Homebrew nên chưa cài {n} tự động được. Hãy cài Homebrew (https://brew.sh) hoặc dùng bản cài chính thức của ứng dụng.", { n: dep.app.name }), warn: true };
+    }
+    // đã cài bằng cách khác với cách sắp dùng → sẽ có hai bản song song
+    const via = depSt.via[id];
+    const will = pm === "brew" ? (id === "docker" ? "docker-desktop" : id === "redis" && dep.method === "source" ? "source" : "brew") : pm === "apt" ? "apt" : "rpm";
+    if (via && via !== will && via !== "other")
+      return { txt: t("Máy đang cài {n} qua {a}, còn cách cài này dùng {b}. Cài tiếp sẽ tạo bản thứ hai chạy song song. Nên gỡ bản cũ trước.", { n: dep.app.name, a: depViaName(via), b: depViaName(will) }), warn: true };
     if (depMac()) {
       if (id === "redis") return { txt: dep.method === "source" ? t("Biên dịch từ mã nguồn cần Xcode Command Line Tools, mất vài phút và cài vào thư mục riêng ~/.local/redis (không đụng bản Homebrew).") : t("Homebrew chỉ cài bản mới nhất nên không có danh sách phiên bản. Muốn chọn phiên bản, hãy chọn “Biên dịch từ mã nguồn”."), warn: false };
       if (id === "docker" || id === "nginx") return { txt: t("Homebrew chỉ cài bản mới nhất của ứng dụng này (macOS), nên không có danh sách phiên bản."), warn: false };
@@ -1106,10 +1121,11 @@
       : need ? t("Gõ “{h}” để xác nhận xoá sạch", { h: need }) : "";
     const cur = depSt.ver[dep.app.id];
     $("#depInstalled").hidden = false;
+    const via = depSt.via[dep.app.id];
     if (un) $("#depInstalled").textContent = cur
-      ? t("Đang cài {n} phiên bản {v}.", { n: dep.app.name, v: cur })
+      ? t("Đang cài {n} phiên bản {v}.", { n: dep.app.name, v: cur }) + (via ? " " + t("Cài qua: {a}. Script sẽ gỡ theo đúng cách cài và quét thêm các nơi khác.", { a: depViaName(via) }) : "")
       : t("Chưa phát hiện {n} trên máy này; script vẫn dọn các thư mục còn sót.", { n: dep.app.name });
-    else if (cur) $("#depInstalled").textContent = t("Máy này đã cài {n} phiên bản {v}. Cài tiếp có thể nâng cấp hoặc ghi đè cấu hình repo.", { n: dep.app.name, v: cur });
+    else if (cur) $("#depInstalled").textContent = t("Máy này đã cài {n} phiên bản {v}. Cài tiếp có thể nâng cấp hoặc ghi đè cấu hình repo.", { n: dep.app.name, v: cur }) + (via ? " " + t("Cài qua: {a}.", { a: depViaName(via) }) : "");
     else $("#depInstalled").hidden = true;
     depCheckConfirm();
   }
