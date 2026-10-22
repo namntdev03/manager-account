@@ -1618,6 +1618,25 @@
       toast(t("Không sao chép được, hãy bôi đen và copy thủ công."), "bad");
     }
   });
+  async function loadSecurity() {
+    try {
+      const s = await invoke("get_security");
+      $("#reqAuth").checked = !!s.require_auth;
+    } catch {
+      $("#reqAuth").checked = true;
+    }
+  }
+  $("#reqAuth").addEventListener("change", async (e) => {
+    const want = e.target.checked;
+    try {
+      await invoke("set_security", { requireAuth: want });
+      toast(want ? t("Đã bật yêu cầu xác thực") : t("Đã tắt yêu cầu xác thực"), "ok");
+    } catch (err) {
+      e.target.checked = !want;
+      toast(tr(err), "bad");
+    }
+  });
+  loadSecurity();
   $("#autoUpd").addEventListener("change", (e) => {
     S.autoUpd = e.target.checked;
     store.set("autoUpd", S.autoUpd ? "1" : "0");

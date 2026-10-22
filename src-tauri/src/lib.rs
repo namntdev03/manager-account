@@ -1121,6 +1121,176 @@ fn rules_sync_inner(app: &tauri::AppHandle) -> Result<(), String> {
     save_rules(&app, &keep)
 }
 
+// ───────────────────────── Xác thực hệ điều hành trước khi xem bí mật ─────────────────────────
+
+enum Auth {
+    Ok,
+    Denied,
+    Unavailable(String),
+}
+
+/// Sau khi xác thực thành công, không hỏi lại trong khoảng này (để bấm Hiện nhiều lần không bị hỏi liên tục).
+const AUTH_GRACE_SECS: u64 = 120;
+
+#[derive(Default)]
+struct AuthState(Mutex<Option<std::time::Instant>>);
+
+#[derive(Serialize, Deserialize)]
+struct Security {
+    #[serde(default = "yes")]
+    require_auth: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+fn load_security(app: &tauri::AppHandle) -> Security {
+    data_dir(app)
+        .ok()
+        .and_then(|d| fs::read_to_string(d.join("security.json")).ok())
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or(Security { require_auth: true })
+}
+
+#[cfg(target_os = "macos")]
+fn os_auth() -> Auth {
+    // Touch ID hoặc mật khẩu máy (LAPolicyDeviceOwnerAuthentication = 2), gọi qua JXA của osascript
+    let script = r#"
+ObjC.import("LocalAuthentication");
+ObjC.import("Foundation");
+var out = "FAIL";
+var ctx = $.LAContext.alloc.init;
+var err = Ref();
+if (!ctx.canEvaluatePolicyError(2, err)) {
+  out = "NA";
+} else {
+  var done = false, ok = false;
+  ctx.evaluatePolicyLocalizedReasonReply(2, "Manager Account cần xác thực để xem hoặc sao lưu thông tin bí mật.", function (s, e) { ok = s; done = true; });
+  var until = $.NSDate.dateWithTimeIntervalSinceNow(120);
+  while (!done && $.NSDate.date.compare(until) < 0) {
+    $.NSRunLoop.currentRunLoop.runModeBeforeDate($.NSDefaultRunLoopMode, $.NSDate.dateWithTimeIntervalSinceNow(0.1));
+  }
+  out = ok ? "OK" : "FAIL";
+}
+out;
+"#;
+    let mut c = new_cmd("osascript");
+    c.args(["-l", "JavaScript", "-e", script]);
+    match run_cmd(c, None) {
+        Ok(o) if o.ok => match o.stdout.trim() {
+            "OK" => Auth::Ok,
+            "NA" => Auth::Unavailable("máy chưa đặt mật khẩu đăng nhập".to_string()),
+            _ => Auth::Denied,
+        },
+        Ok(o) => Auth::Unavailable(o.stderr),
+        Err(e) => Auth::Unavailable(e),
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn os_auth() -> Auth {
+    // Windows Hello / PIN qua UserConsentVerifier (WinRT), chạy bằng PowerShell
+    let script = r#"
+$ErrorActionPreference = 'Stop'
+try {
+  Add-Type -AssemblyName System.Runtime.WindowsRuntime
+  $null = [Windows.Security.Credentials.UI.UserConsentVerifier, Windows.Security.Credentials.UI, ContentType=WindowsRuntime]
+  $asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
+  function Await($op, $type) { $t = $asTask.MakeGenericMethod($type).Invoke($null, @($op)); $t.Wait(-1) | Out-Null; $t.Result }
+  $a = Await ([Windows.Security.Credentials.UI.UserConsentVerifier]::CheckAvailabilityAsync()) ([Windows.Security.Credentials.UI.UserConsentVerifierAvailability])
+  if ("$a" -ne 'Available') { "NA:$a"; exit }
+  $r = Await ([Windows.Security.Credentials.UI.UserConsentVerifier]::RequestVerificationAsync('Manager Account can xac thuc de xem hoac sao luu thong tin bi mat.')) ([Windows.Security.Credentials.UI.UserConsentVerificationResult])
+  "R:$r"
+} catch { "ERR:" + $_.Exception.Message }
+"#;
+    let utf16: Vec<u8> = script.encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
+    let mut c = new_cmd("powershell");
+    c.args(["-NoProfile", "-NonInteractive", "-EncodedCommand", B64.encode(utf16).as_str()]);
+    match run_cmd(c, None) {
+        Ok(o) => {
+            let out = o.stdout.trim().to_string();
+            if out == "R:Verified" {
+                Auth::Ok
+            } else if let Some(r) = out.strip_prefix("R:") {
+                match r {
+                    "DeviceNotPresent" | "NotConfiguredForUser" | "DisabledByPolicy" => Auth::Unavailable(r.to_string()),
+                    _ => Auth::Denied,
+                }
+            } else if let Some(m) = out.strip_prefix("NA:").or_else(|| out.strip_prefix("ERR:")) {
+                Auth::Unavailable(m.to_string())
+            } else {
+                Auth::Unavailable(format!("{out} {}", o.stderr))
+            }
+        }
+        Err(e) => Auth::Unavailable(e),
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn os_auth() -> Auth {
+    // Linux: hộp thoại nhập mật khẩu của polkit (cần polkit agent của môi trường desktop)
+    let mut c = new_cmd("pkexec");
+    c.arg("/bin/true");
+    match run_cmd(c, None) {
+        Ok(o) if o.ok => Auth::Ok,
+        Ok(o) if o.stderr.contains("No authentication agent") => Auth::Unavailable("không có polkit agent".to_string()),
+        Ok(_) => Auth::Denied,
+        Err(e) => Auth::Unavailable(e),
+    }
+}
+
+async fn auth_check(app: &tauri::AppHandle) -> Auth {
+    {
+        let st = app.state::<AuthState>();
+        let last = *st.0.lock().unwrap();
+        if let Some(t) = last {
+            if t.elapsed().as_secs() < AUTH_GRACE_SECS {
+                return Auth::Ok;
+            }
+        }
+    }
+    let r = tauri::async_runtime::spawn_blocking(os_auth)
+        .await
+        .unwrap_or(Auth::Denied);
+    if matches!(r, Auth::Ok) {
+        *app.state::<AuthState>().0.lock().unwrap() = Some(std::time::Instant::now());
+    }
+    r
+}
+
+/// Gọi ở đầu các lệnh trả về bí mật: nếu đang bật yêu cầu xác thực thì hỏi Touch ID / mật khẩu máy.
+async fn require_auth(app: &tauri::AppHandle) -> Result<(), String> {
+    if !load_security(app).require_auth {
+        return Ok(());
+    }
+    match auth_check(app).await {
+        Auth::Ok => Ok(()),
+        Auth::Denied => Err("Xác thực không thành công hoặc đã bị huỷ".to_string()),
+        Auth::Unavailable(m) => Err(format!(
+            "Không dùng được xác thực của hệ điều hành ({m}). Bạn có thể tắt yêu cầu này trong Cài đặt."
+        )),
+    }
+}
+
+#[tauri::command]
+async fn get_security(app: tauri::AppHandle) -> Result<Security, String> {
+    Ok(load_security(&app))
+}
+
+#[tauri::command]
+async fn set_security(app: tauri::AppHandle, require_auth: bool) -> Result<(), String> {
+    if !require_auth && load_security(&app).require_auth {
+        // tắt khoá thì cũng phải xác thực (trừ khi hệ điều hành không hỗ trợ xác thực)
+        if let Auth::Denied = auth_check(&app).await {
+            return Err("Xác thực không thành công hoặc đã bị huỷ".to_string());
+        }
+    }
+    let f = data_dir(&app)?.join("security.json");
+    let s = serde_json::to_string_pretty(&Security { require_auth }).map_err(|e| e.to_string())?;
+    fs::write(f, s).map_err(|e| e.to_string())
+}
+
 // ───────────────────────── Kho lưu trữ (sao lưu / khôi phục) ─────────────────────────
 
 #[derive(Serialize, Deserialize)]
@@ -1182,6 +1352,7 @@ fn tilde(path: &str) -> String {
 
 #[tauri::command]
 async fn backup_export(app: tauri::AppHandle, passphrase: String, path: String) -> Result<BackupSummary, String> {
+    require_auth(&app).await?;
     tauri::async_runtime::spawn_blocking(move || {
         use chacha20poly1305::aead::{Aead, KeyInit};
         if passphrase.chars().count() < 8 {
@@ -1966,6 +2137,7 @@ async fn save_profile(app: tauri::AppHandle, input: ProfileInput) -> Result<Prof
 /// để người dùng xem lại ngay trong form sửa. Chỉ chạy cục bộ, không gửi đi đâu.
 #[tauri::command]
 async fn reveal_secret(app: tauri::AppHandle, id: String) -> Result<String, String> {
+    require_auth(&app).await?;
     let list = load_profiles(&app)?;
     let p = list.iter().find(|x| x.id == id).ok_or("Không tìm thấy tài khoản")?;
     if p.auth == "token" {
@@ -1980,6 +2152,7 @@ async fn reveal_secret(app: tauri::AppHandle, id: String) -> Result<String, Stri
 /// Mật khẩu SSH đã lưu của một tài khoản (để xem lại trong form sửa).
 #[tauri::command]
 async fn reveal_password(app: tauri::AppHandle, id: String) -> Result<String, String> {
+    require_auth(&app).await?;
     let p = find_profile(&app, &id)?;
     entry(&p.id)?
         .get_password()
@@ -1989,6 +2162,7 @@ async fn reveal_password(app: tauri::AppHandle, id: String) -> Result<String, St
 /// Passphrase của key SSH đã lưu (để xem lại trong form sửa).
 #[tauri::command]
 async fn reveal_passphrase(app: tauri::AppHandle, id: String) -> Result<String, String> {
+    require_auth(&app).await?;
     let p = find_profile(&app, &id)?;
     entry(&pp_key(&p.id))?
         .get_password()
@@ -2455,11 +2629,12 @@ pub fn run() {
     }
     tauri::Builder::default()
         .manage(Sessions::default())
+        .manage(AuthState::default())
         .manage(StatsState { sys: Mutex::new(sysinfo::System::new()), started: std::time::Instant::now() })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
-            user_home, get_stats, reveal_passphrase, backup_export, backup_inspect, backup_import, ssh_keygen, ssh_public_key, open_url, rules_list, rules_save, rules_delete, rules_sync, reveal_secret, reveal_password, list_hosts, save_host, delete_host, sftp_list, sftp_download, sftp_upload, sftp_mkdir, sftp_rename, sftp_remove, term_open, term_write, term_resize, term_close,
+            user_home, get_stats, get_security, set_security, reveal_passphrase, backup_export, backup_inspect, backup_import, ssh_keygen, ssh_public_key, open_url, rules_list, rules_save, rules_delete, rules_sync, reveal_secret, reveal_password, list_hosts, save_host, delete_host, sftp_list, sftp_download, sftp_upload, sftp_mkdir, sftp_rename, sftp_remove, term_open, term_write, term_resize, term_close,
             list_profiles,
             save_profile,
             delete_profile,

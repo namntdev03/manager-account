@@ -128,6 +128,10 @@
     "Chạy việc lâu trên server nên dùng <code>tmux</code> hoặc <code>screen</code> để không bị mất khi đóng phiên.": "For long-running work on a server, use <code>tmux</code> or <code>screen</code> so it is not lost when the session closes.",
     "Ẩn / hiện hướng dẫn": "Hide / show the guide",
     // ── quản lý file
+    "Yêu cầu xác thực khi xem bí mật và sao lưu": "Require authentication to view secrets and back up",
+    "Hỏi Touch ID hoặc mật khẩu máy (macOS), Windows Hello hoặc PIN (Windows), mật khẩu hệ thống (Linux) trước khi hiện token, mật khẩu, key, passphrase và khi tạo file sao lưu. Sau khi xác thực, app không hỏi lại trong 2 phút.": "Asks for Touch ID or your computer password (macOS), Windows Hello or PIN (Windows), or the system password (Linux) before showing tokens, passwords, keys and passphrases, and before creating a backup file. After you authenticate, the app does not ask again for 2 minutes.",
+    "Đã bật yêu cầu xác thực": "Authentication is now required",
+    "Đã tắt yêu cầu xác thực": "Authentication is no longer required",
     "Passphrase của key (tuỳ chọn)": "Key passphrase (optional)",
     "Chỉ cần nếu key của bạn có đặt passphrase": "Only needed if your key has a passphrase",
     "Xoá passphrase đã lưu": "Remove the saved passphrase",
@@ -347,6 +351,9 @@
 
   // Thông báo từ phần Rust (backend) — thay theo cụm, dài trước ngắn sau.
   const BACKEND = [
+    ["Xác thực không thành công hoặc đã bị huỷ", "Authentication failed or was cancelled"],
+    ["Không dùng được xác thực của hệ điều hành", "The operating system's authentication is not available"],
+    ["Bạn có thể tắt yêu cầu này trong Cài đặt.", "You can turn this requirement off in Settings."],
     ["Không lưu được passphrase vào keychain", "Could not save the passphrase to the keychain"],
     ["Chưa có passphrase nào được lưu cho tài khoản này", "No passphrase is saved for this account"],
     ["Mật khẩu sao lưu cần ít nhất 8 ký tự", "The backup password needs at least 8 characters"],
