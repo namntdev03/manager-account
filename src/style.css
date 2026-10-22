@@ -597,4 +597,4 @@ body::after { bottom: 0; background: linear-gradient(to top, var(--bg), rgba(244
 .dep-st .st { width: 7px; height: 7px; }
 .dep-err { color: #fca5a5; }
 .dep-re { margin-top: 12px; appearance: none; background: none; border: 0; padding: 0; font: inherit; font-size: 12px; font-weight: 600; color: rgba(255, 255, 255, .8); text-decoration: underline; cursor: pointer; }
-.dep-warn { color: #fbbf24; background: rgba(251,191,36,.1); border: 1px solid rgba(251,191,36,.35); border-radius: 10px; padding: 10px 12px; }
+.dep-warn { color: #7c2d12; background: #fef3c7; border: 1px solid #f59e0b; border-left-width: 4px; border-radius: 10px; padding: 10px 14px; font-weight: 500; line-height: 1.5; }
