@@ -5,7 +5,7 @@
 - **Tài khoản Git** (GitHub/GitLab/Bitbucket, SSH key hoặc token): đổi bằng một cú bấm, toàn máy hoặc một repo; **quy tắc theo thư mục** tự dùng đúng tài khoản; tạo SSH key ed25519 trong app.
 - **Tài khoản npm**: token cho npmjs, GitHub Packages hoặc registry riêng.
 - **SSH host**: terminal nhiều tab trong app, tự điền mật khẩu/passphrase, **quản lý file** trên server qua SSH.
-- **Kubernetes, ArgoCD, Harbor**: lưu kubeconfig (mã hoá), token ArgoCD và tài khoản Harbor, đổi bằng một cú bấm, có nhãn môi trường (dev/staging/production).
+- **Kubernetes, ArgoCD, Harbor, Docker**: lưu kubeconfig (mã hoá), token ArgoCD, tài khoản Harbor và Docker registry, đổi bằng một cú bấm, có nhãn môi trường (dev/staging/production).
 - **Kho lưu trữ**: sao lưu mọi thứ vào một file mã hoá bằng mật khẩu, khôi phục trên máy khác.
 - **Hiệu năng**, **xác thực** (Touch ID / Windows Hello / mật khẩu) trước khi xem bí mật, Tiếng Việt và English.
 
@@ -29,6 +29,7 @@
 - **Kho lưu trữ**: xuất tài khoản, bí mật, nội dung key, passphrase, SSH host và quy tắc ra file `.macbackup` mã hoá (Argon2id + ChaCha20-Poly1305). Khi khôi phục, dữ liệu được gộp vào dữ liệu hiện có; trùng mã thì hỏi bạn ghi đè hay giữ cả hai.
 - **Kubernetes**: dán kubeconfig đã nhúng sẵn chứng chỉ (`kubectl config view --flatten --minify --raw`). App mã hoá thành file riêng (khoá trong kho bảo mật), bấm dùng sẽ ghi `~/.kube/config` và sao lưu file cũ thành `config.backup-<thời gian>`. Cluster đánh dấu production hỏi xác nhận trước khi đổi. Test dùng `kubectl get --raw /version`.
 - **ArgoCD**: lưu địa chỉ và account token (nên tạo token riêng, quyền tối thiểu). Bấm dùng ghi `~/.config/argocd/config`, mỗi tài khoản là một context. Test gọi `/api/v1/session/userinfo`. Nếu ArgoCD không mở ra ngoài, dùng `https://localhost:8080` sau `kubectl port-forward` và bật tuỳ chọn chứng chỉ tự ký.
+- **Docker registry**: Docker Hub, GHCR hoặc registry riêng: lưu địa chỉ, username và access token. Bấm dùng chạy `docker login`. Test gọi `auth.docker.io` (Docker Hub) hoặc `<registry>/v2/`.
 - **Harbor**: lưu địa chỉ, username (nên dùng robot account) và mật khẩu/secret. Bấm dùng chạy `docker login`. Test gọi `/api/v2.0/projects`.
 - **Hiệu năng**: RAM, CPU và số phiên SSH mà chính app đang dùng.
 - **Ngôn ngữ**: Tiếng Việt và English (Cài đặt → Ngôn ngữ; mặc định theo ngôn ngữ hệ thống). Thêm ngôn ngữ mới: thêm một bảng trong `src/i18n.js`.

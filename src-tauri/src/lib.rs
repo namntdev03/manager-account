@@ -2221,6 +2221,10 @@ fn cq(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+fn is_svc(kind: &str) -> bool {
+    matches!(kind, "argocd" | "harbor" | "docker")
+}
+
 fn svc_norm_url(input: &str) -> String {
     let s = input.trim().trim_end_matches('/');
     if s.is_empty() {
@@ -2271,8 +2275,8 @@ fn save_svc_profile(app: &tauri::AppHandle, input: ProfileInput, kind: &str) -> 
         return Err("Cần nhập tên hiển thị và địa chỉ (URL)".into());
     }
     let login = input.login.as_deref().map(str::trim).unwrap_or("").to_string();
-    if kind == "harbor" && login.is_empty() {
-        return Err("Cần nhập username (hoặc robot account) của Harbor".into());
+    if kind != "argocd" && login.is_empty() {
+        return Err("Cần nhập username (hoặc robot account) của registry".into());
     }
     let id = input.id.clone().filter(|s| !s.is_empty()).unwrap_or_else(new_id);
     let existing = list.iter().find(|p| p.id == id).cloned();
@@ -2285,7 +2289,7 @@ fn save_svc_profile(app: &tauri::AppHandle, input: ProfileInput, kind: &str) -> 
         has_token = true;
     }
     if !has_token {
-        return Err(if kind == "harbor" {
+        return Err(if kind != "argocd" {
             "Cần nhập mật khẩu hoặc robot secret".into()
         } else {
             "Cần nhập auth token của ArgoCD".into()
@@ -2350,6 +2354,22 @@ fn svc_test(app: &tauri::AppHandle, p: &Profile) -> Result<TestResult, String> {
         .map_err(|e| format!("Không đọc được bí mật từ keychain: {e}"))?;
     let bad = |m: String| Ok(TestResult { ok: false, message: m });
     let _ = app;
+    if p.kind == "docker" {
+        let auth = format!("user = \"{}:{}\"\n", cq(&p.login), cq(&secret));
+        let hub = p.host == "docker.io" || p.host.ends_with(".docker.io");
+        let url = if hub {
+            "https://auth.docker.io/token?service=registry.docker.io".to_string()
+        } else {
+            format!("{}/v2/", p.registry)
+        };
+        let (_, code) = svc_get(&url, &auth, p.insecure)?;
+        return match code.as_str() {
+            "200" => Ok(TestResult { ok: true, message: format!("Đăng nhập được registry với {}", p.login) }),
+            "401" => bad("Registry từ chối thông tin đăng nhập (HTTP 401).".into()),
+            "403" => bad("Tài khoản không có quyền (HTTP 403).".into()),
+            c => bad(format!("Phản hồi bất thường (HTTP {c}).")),
+        };
+    }
     if p.kind == "harbor" {
         let auth = format!("user = \"{}:{}\"\n", cq(&p.login), cq(&secret));
         let (_, code) = svc_get(&format!("{}/api/v2.0/projects?page_size=1", p.registry), &auth, p.insecure)?;
@@ -2450,7 +2470,7 @@ fn write_managed(path: &std::path::Path, body: &str) -> Result<Option<PathBuf>, 
 
 fn svc_apply(app: &tauri::AppHandle, p: &Profile) -> Result<Vec<String>, String> {
     let mut log: Vec<String> = vec![];
-    if p.kind == "harbor" {
+    if p.kind != "argocd" {
         let secret = entry(&p.id)?
             .get_password()
             .map_err(|e| format!("Không đọc được bí mật từ keychain: {e}"))?;
@@ -2546,6 +2566,9 @@ async fn save_profile(app: tauri::AppHandle, input: ProfileInput) -> Result<Prof
     }
     if input.kind.as_deref() == Some("harbor") {
         return save_svc_profile(&app, input, "harbor");
+    }
+    if input.kind.as_deref() == Some("docker") {
+        return save_svc_profile(&app, input, "docker");
     }
     let mut list = load_profiles(&app)?;
     let name = input.name.trim().to_string();
@@ -2690,7 +2713,7 @@ async fn delete_profile(app: tauri::AppHandle, id: String) -> Result<(), String>
     if p.kind == "k8s" {
         kube_remove(&app, &id);
     }
-    if p.kind == "argocd" || p.kind == "harbor" {
+    if is_svc(&p.kind) {
         let mut m = load_active(&app);
         m.retain(|_, v| v != &id);
         save_active(&app, &m);
@@ -2729,7 +2752,7 @@ async fn apply_profile(
         }
         return Ok(log);
     }
-    if p.kind == "argocd" || p.kind == "harbor" {
+    if is_svc(&p.kind) {
         return svc_apply(&app, &p);
     }
     let t = target(&scope, repo_path)?;
@@ -2848,7 +2871,7 @@ async fn get_current(
             if p.kind == "k8s" {
                 return kube_is_active(&app, p);
             }
-            if p.kind == "argocd" || p.kind == "harbor" {
+            if is_svc(&p.kind) {
                 return svc_is_active(&app, p);
             }
             if p.kind == "npm" {
@@ -2890,7 +2913,7 @@ async fn test_profile(app: tauri::AppHandle, id: String) -> Result<TestResult, S
             message: "Tài khoản SSH được thử bằng cách kết nối tới một SSH host.".into(),
         });
     }
-    if p.kind == "argocd" || p.kind == "harbor" {
+    if is_svc(&p.kind) {
         let (app2, p2) = (app.clone(), p.clone());
         return tauri::async_runtime::spawn_blocking(move || svc_test(&app2, &p2))
             .await
