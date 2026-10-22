@@ -401,6 +401,12 @@
     "Lưu": "Save",
     // ── cài đặt
     "Phiên bản": "Version",
+    "Cách cài": "Install method",
+    "Homebrew (bản mới nhất, nhanh)": "Homebrew (latest, fast)",
+    "Biên dịch từ mã nguồn (chọn được phiên bản)": "Build from source (pick a version)",
+    "Homebrew chỉ cài bản mới nhất nên không có danh sách phiên bản. Muốn chọn phiên bản, hãy chọn “Biên dịch từ mã nguồn”.": "Homebrew only installs the latest release, so there is no version list. To pick a version, choose “Build from source”.",
+    "Homebrew chỉ cài bản mới nhất của ứng dụng này (macOS), nên không có danh sách phiên bản.": "Homebrew only installs the latest release of this app (macOS), so there is no version list.",
+    "Biên dịch từ mã nguồn cần Xcode Command Line Tools, mất vài phút và cài vào thư mục riêng ~/.local/redis (không đụng bản Homebrew).": "Building from source needs Xcode Command Line Tools, takes a few minutes and installs into its own folder ~/.local/redis (the Homebrew copy is untouched).",
     "Kiểm tra cập nhật": "Check for updates",
     "Tự kiểm tra bản mới khi mở app": "Automatically check for updates when the app opens",
     "Ngôn ngữ": "Language",

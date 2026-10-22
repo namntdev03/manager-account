@@ -912,7 +912,7 @@
 
   const hostDlg = $("#hostDlg");
   // ───────── Deployment: cài ứng dụng lên máy này hoặc một SSH host ─────────
-  const dep = { app: null, ver: "", term: null, fit: null, id: null, ended: false };
+  const dep = { app: null, ver: "", method: "brew", term: null, fit: null, id: null, ended: false };
   const depTarget = () => $('[data-sel="dep_target"]').dataset.value || "";
   const depAcc = () => $('[data-sel="dep_acc"]').dataset.value || "";
   const depHost = () => S.hosts.find((h) => h.id === depTarget());
@@ -1034,24 +1034,41 @@
         : t("Không lấy được danh sách mới, đang dùng danh sách có sẵn trong app (có thể đã cũ).");
     depRefreshScript();
   }
-  // Cảnh báo khi hệ đích không cài đúng được phiên bản người dùng đã chọn
+  // Máy đích là macOS (Homebrew)? Khi đó Redis có thêm lựa chọn biên dịch từ mã nguồn.
+  const depMac = () => depSt.pm === "brew";
+  const depHasMethod = () => depMac() && dep.app && dep.app.id === "redis";
+  // Có danh sách phiên bản để chọn không?
+  function depVerVisible() {
+    if (!depMac()) return true;
+    const id = dep.app.id;
+    if (id === "postgres") return true;
+    if (id === "redis") return dep.method === "source";
+    return false; // docker, nginx trên macOS: Homebrew chỉ cài bản mới nhất
+  }
+  function depEffVer() { return depVerVisible() ? dep.ver : ""; }
+  // Ghi chú dưới ô chọn: { txt, warn }
   function depPinWarn() {
     const pm = depSt.pm, id = dep.app.id, v = dep.ver;
-    if (!pm) return "";
-    if (pm === "brew") {
-      if (id === "docker") return t("macOS cài Docker Desktop bằng Homebrew nên không chọn được phiên bản; sẽ cài bản mới nhất.");
-      if (id === "redis" && v) return t("Homebrew luôn cài Redis bản mới nhất, nên phiên bản bạn chọn ({v}) sẽ KHÔNG được áp dụng và máy có thể bị nâng lên bản mới hơn.", { v });
-      if (id === "nginx" && v !== "mainline") return t("Homebrew chỉ có nginx bản mainline mới nhất, nên lựa chọn “{v}” sẽ KHÔNG được áp dụng.", { v });
+    if (!pm) return { txt: "", warn: false };
+    if (depMac()) {
+      if (id === "redis") return { txt: dep.method === "source" ? t("Biên dịch từ mã nguồn cần Xcode Command Line Tools, mất vài phút và cài vào thư mục riêng ~/.local/redis (không đụng bản Homebrew).") : t("Homebrew chỉ cài bản mới nhất nên không có danh sách phiên bản. Muốn chọn phiên bản, hãy chọn “Biên dịch từ mã nguồn”."), warn: false };
+      if (id === "docker" || id === "nginx") return { txt: t("Homebrew chỉ cài bản mới nhất của ứng dụng này (macOS), nên không có danh sách phiên bản."), warn: false };
     }
     if ((pm === "dnf" || pm === "yum") && id === "redis" && v)
-      return t("Hệ này cài Redis theo repo của bản phân phối, nên phiên bản bạn chọn ({v}) có thể KHÔNG được áp dụng.", { v });
-    return "";
+      return { txt: t("Hệ này cài Redis theo repo của bản phân phối, nên phiên bản bạn chọn ({v}) có thể KHÔNG được áp dụng.", { v }), warn: true };
+    return { txt: "", warn: false };
   }
   function depRefreshScript() {
     const w = depPinWarn();
-    $("#depPin").hidden = !w;
-    $("#depPin").textContent = w ? "⚠ " + w : "";
-    $("#depScript").value = DEPLOY.script(dep.app.id, dep.ver);
+    $("#depPin").hidden = !w.txt;
+    $("#depPin").classList.toggle("dep-warn", w.warn);
+    $("#depPin").textContent = w.txt ? (w.warn ? "⚠ " : "") + w.txt : "";
+    $("#depMethodLbl").hidden = !depHasMethod();
+    $("#depVerLbl").hidden = !depVerVisible();
+    $("#depVerNote").hidden = !depVerVisible();
+    $("#depMethod").innerHTML = [["brew", "Homebrew (bản mới nhất, nhanh)"], ["source", "Biên dịch từ mã nguồn (chọn được phiên bản)"]]
+      .map(([k, l]) => `<button type="button" data-m="${k}" class="${dep.method === k ? "on" : ""}">${esc(t(l))}</button>`).join("");
+    $("#depScript").value = DEPLOY.script(dep.app.id, depEffVer(), depHasMethod() ? dep.method : "");
     document.querySelectorAll("#depVer button").forEach((b) => b.classList.toggle("on", b.dataset.v === dep.ver));
   }
   function depCheckConfirm() {
@@ -1063,6 +1080,7 @@
     const h = depHost();
     $("#depTitle").textContent = t("Cài {n}", { n: dep.app.name });
     $("#depSub").textContent = h ? t("Lên server {h}", { h: `${h.name} (${h.address})` }) : t("Lên máy này (local)");
+    dep.method = "brew";
     depRenderVersions(false);
     $("#depConfirm").value = "";
     $("#depConfirmLbl").hidden = !h;
@@ -1075,6 +1093,12 @@
     depCheckConfirm();
     $("#depDlg").showModal();
   }
+  $("#depMethod").addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    dep.method = b.dataset.m;
+    depRefreshScript();
+  });
   $("#depVer").addEventListener("click", (e) => {
     const b = e.target.closest("button");
     if (!b) return;
@@ -1111,7 +1135,7 @@
       dep.id = await invoke("deploy_run", {
         hostId: h ? h.id : null,
         accountId: h ? depAcc() || null : null,
-        script: DEPLOY.script(dep.app.id, dep.ver),
+        script: DEPLOY.script(dep.app.id, depEffVer(), depHasMethod() ? dep.method : ""),
         cols: dep.term.cols,
         rows: dep.term.rows,
       });

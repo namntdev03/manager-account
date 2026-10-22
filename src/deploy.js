@@ -91,6 +91,7 @@ echo "Không mở cổng 5432 ra internet nếu không cần."
 `;
 
   const REDIS = String.raw`RV="@VERSION@"
+METHOD="@METHOD@"
 port_check 6379
 if command -v redis-server >/dev/null 2>&1; then echo "Đã có Redis: $(redis-server --version)"; fi
 confirm
@@ -117,9 +118,37 @@ case "$PM" in
     $SUDO systemctl enable --now redis
     ;;
   brew)
-    if [ -n "$RV" ]; then echo "Lưu ý: Homebrew cài bản mới nhất, không chọn được $RV."; fi
-    brew install redis
-    brew services start redis
+    if [ "$METHOD" = source ]; then
+      xcode-select -p >/dev/null 2>&1 || { echo "Cần Xcode Command Line Tools: chạy xcode-select --install rồi thử lại."; exit 1; }
+      if [ -z "$RV" ]; then
+        RV="$(curl -fsSL https://api.github.com/repos/redis/redis/releases/latest | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p')"
+        [ -n "$RV" ] || { echo "Không lấy được phiên bản mới nhất từ GitHub."; exit 1; }
+      fi
+      URL="https://github.com/redis/redis/archive/refs/tags/$RV.tar.gz"
+      W="$(mktemp -d)"
+      echo "Tải $URL"
+      curl -fsSL "$URL" -o "$W/redis.tar.gz" || { echo "Không tải được (phiên bản không tồn tại?)."; rm -rf "$W"; exit 1; }
+      tar -xzf "$W/redis.tar.gz" -C "$W"
+      cd "$W"/redis-*
+      make -j"$(sysctl -n hw.ncpu)"
+      DEST="$HOME/.local/redis/$(basename "$PWD" | sed 's/^redis-//')"
+      make PREFIX="$DEST" install
+      cd /
+      rm -rf "$W"
+      mkdir -p "$HOME/.local/redis/data"
+      echo "Đã cài vào $DEST"
+      if lsof -nP -iTCP:6379 -sTCP:LISTEN >/dev/null 2>&1; then
+        echo "Cổng 6379 đang được dùng (có thể là Redis của Homebrew) nên chưa khởi động. Dừng nó rồi chạy lệnh bên dưới."
+      else
+        "$DEST/bin/redis-server" --bind 127.0.0.1 --port 6379 --dir "$HOME/.local/redis/data" --daemonize yes
+        echo "Đã khởi động Redis, chỉ lắng nghe 127.0.0.1:6379."
+      fi
+      echo "Chạy thủ công: $DEST/bin/redis-server --bind 127.0.0.1 --dir $HOME/.local/redis/data"
+      "$DEST/bin/redis-server" --version
+    else
+      brew install redis
+      brew services start redis
+    fi
     ;;
 esac
 echo "Hoàn tất cài Redis. Mặc định chỉ lắng nghe localhost:6379."
@@ -201,10 +230,10 @@ echo "Hoàn tất cài Nginx."
   window.DEPLOY = {
     APPS,
     SOON,
-    script(appId, version) {
+    script(appId, version, method) {
       const a = APPS.find((x) => x.id === appId);
       if (!a) return "";
-      return PRE + a.script.split("@VERSION@").join(version || "");
+      return PRE + a.script.split("@METHOD@").join(method || "").split("@VERSION@").join(version || "");
     },
   };
 })();
