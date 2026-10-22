@@ -563,3 +563,11 @@ body::after { bottom: 0; background: linear-gradient(to top, var(--bg), rgba(244
 #cfDlg .actions { flex-wrap: wrap; }
 
 .set-note { margin-top: 6px; padding-left: 28px; font-size: 12px; line-height: 1.6; color: #6b7280; }
+
+/* Kubernetes: nhãn môi trường */
+.env { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; vertical-align: middle; color: #fff; }
+.env-prod { background: #dc2626; }
+.env-staging { background: #d97706; }
+.env-dev { background: #2563eb; }
+#viewKube { align-self: flex-start; margin-bottom: 8px; }
+#f_kube { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }

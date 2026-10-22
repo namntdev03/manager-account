@@ -55,6 +55,7 @@
     download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
     archive: '<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
     chevron: '<path d="m6 9 6 6 6-6"/>',
+    k8s: '<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/><path d="M12 3v6M12 15v6M3 12h6M15 12h6M5.6 5.6l4.3 4.3M14.1 14.1l4.3 4.3M18.4 5.6l-4.3 4.3M9.9 14.1l-4.3 4.3"/>',
   };
   const icon = (n, c = "") =>
     `<svg class="ic ${c}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n] || ""}</svg>`;
@@ -69,6 +70,8 @@
   const platIcon = (p, cls = "") =>
     p.id === "ssh"
       ? icon("terminal", cls)
+      : p.id === "k8s"
+      ? icon("k8s", cls)
       : LOGOS[p.id]
       ? `<svg class="ic plat ${cls}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="${LOGOS[p.id]}"/></svg>`
       : icon("globe", cls);
@@ -91,6 +94,8 @@
   LOGOS.npm = "M1.763 0C.786 0 0 .786 0 1.763v20.474C0 23.214.786 24 1.763 24h20.474c.977 0 1.763-.786 1.763-1.763V1.763C24 .786 23.214 0 22.237 0zM5.13 5.323l13.837.019-.009 13.836h-3.464l.01-10.382h-3.456L12.04 19.17H5.113z";
   const NPM_PLAT = { id: "npm", name: "npm", host: "registry.npmjs.org" };
   const SSH_PLAT = { id: "ssh", name: "SSH", host: "ssh" };
+  const K8S_PLAT = { id: "k8s", name: "Kubernetes", host: "kubernetes" };
+  const ENV_LABEL = { prod: "PRODUCTION", staging: "STAGING", dev: "DEV" };
   const PLATFORMS = [
     { id: "github", name: "GitHub", host: "github.com", test: (h) => h.includes("github") },
     { id: "gitlab", name: "GitLab", host: "gitlab.com", test: (h) => h.includes("gitlab") },
@@ -99,7 +104,7 @@
   const platOf = (host) =>
     PLATFORMS.find((p) => p.test(host)) || { id: "host:" + host, name: host, host };
   // nền tảng của một tài khoản (npm nhóm riêng, không theo host)
-  const platOfP = (pr) => (pr.kind === "npm" ? NPM_PLAT : pr.kind === "ssh" ? SSH_PLAT : platOf(pr.host));
+  const platOfP = (pr) => (pr.kind === "npm" ? NPM_PLAT : pr.kind === "ssh" ? SSH_PLAT : pr.kind === "k8s" ? K8S_PLAT : platOf(pr.host));
 
   const S = {
     page: "accounts",
@@ -146,12 +151,13 @@
   async function loadCurrent() {
     S.err = "";
     S.current = null;
-    if (S.scope === "repo" && !S.repo) {
+    const sc = S.platform === "k8s" ? "global" : S.scope; // Kubernetes không theo repo
+    if (sc === "repo" && !S.repo) {
       S.err = t("Chọn thư mục repo để xem tài khoản đang dùng.");
       return;
     }
     try {
-      S.current = await invoke("get_current", { scope: S.scope, repoPath: S.repo || null });
+      S.current = await invoke("get_current", { scope: sc, repoPath: S.repo || null });
     } catch (e) {
       S.err = tr(e);
     }
@@ -160,7 +166,7 @@
   // ───────── hiển thị ─────────
   function platformList() {
     const list = PLATFORMS.map((p) => ({ id: p.id, name: p.name, host: p.host }));
-    list.push({ ...NPM_PLAT }, { ...SSH_PLAT });
+    list.push({ ...NPM_PLAT }, { ...K8S_PLAT }, { ...SSH_PLAT });
     S.profiles.forEach((pr) => {
       const p = platOfP(pr);
       if (!list.some((x) => x.id === p.id)) list.push({ id: p.id, name: p.name, host: p.host });
@@ -189,10 +195,13 @@
     const dis = S.busy ? "disabled" : "";
     const isNpm = p.kind === "npm";
     const isSshAcc = p.kind === "ssh"; // tài khoản dùng để SSH vào server
+    const isK8s = p.kind === "k8s";
     const isSsh = p.auth === "ssh";
     const sshDetail = [p.ssh_key_path, p.has_token ? t("mật khẩu đã lưu") : ""].filter(Boolean).join(" · ") || t("Không có key / mật khẩu (nhập khi kết nối)");
-    const detail = isNpm ? p.registry : isSshAcc ? sshDetail : isSsh ? p.ssh_key_path : "user: " + p.login;
-    const subLine = isNpm
+    const detail = isK8s ? p.host : isNpm ? p.registry : isSshAcc ? sshDetail : isSsh ? p.ssh_key_path : "user: " + p.login;
+    const subLine = isK8s
+      ? esc(p.context ? "context: " + p.context : t("Context mặc định"))
+      : isNpm
       ? esc(p.scope || t("Registry mặc định"))
       : isSshAcc
         ? esc(p.login)
@@ -203,11 +212,11 @@
           <span class="label plat-label">${platIcon(platOfP(p))}${esc(p.host)}</span>
           ${active
             ? `<span class="badge"><span class="dot"></span>${t("Đang dùng")}</span>`
-            : `<span class="badge soft">${isNpm ? "npm" : isSshAcc ? (p.ssh_key_path && p.has_token ? t("Key + mật khẩu") : p.has_token ? t("Mật khẩu") : "SSH key") : isSsh ? "SSH key" : "Token"}</span>`}
+            : `<span class="badge soft">${isK8s ? "kubeconfig" : isNpm ? "npm" : isSshAcc ? (p.ssh_key_path && p.has_token ? t("Key + mật khẩu") : p.has_token ? t("Mật khẩu") : "SSH key") : isSsh ? "SSH key" : "Token"}</span>`}
         </div>
-        <div class="acc-name">${esc(p.name)}</div>
+        <div class="acc-name">${esc(p.name)}${isK8s && p.env ? ` <span class="env env-${esc(p.env)}">${ENV_LABEL[p.env] || ""}</span>` : ""}</div>
         <div class="acc-sub">${subLine}</div>
-        <div class="acc-detail" title="${esc(detail)}">${icon(isSsh || isSshAcc ? "key" : "globe")}<span>${esc(detail)}</span></div>
+        <div class="acc-detail" title="${esc(detail)}">${icon(isK8s ? "k8s" : isSsh || isSshAcc ? "key" : "globe")}<span>${esc(detail)}</span></div>
       </div>
       <div class="acc-actions">
         ${isSshAcc ? `<div class="grow-note">${t("Dùng ở menu SSH host")}</div>` : `<button class="btn-w" data-act="use" ${dis}>${busyUse ? t("Đang chuyển…") : `<span>${active ? t("Áp dụng lại") : t("Dùng tài khoản này")}</span>${icon(active ? "refresh" : "arrow")}`}</button>
@@ -351,7 +360,7 @@
   const homeRel = (p) => (S.home && p.startsWith(S.home) ? "~" + p.slice(S.home.length) : p);
   function renderRules() {
     const box = $("#rulesBox");
-    box.hidden = S.page !== "accounts" || S.platform === "npm" || S.platform === "ssh" || S.platform === "all";
+    box.hidden = S.page !== "accounts" || S.platform === "npm" || S.platform === "ssh" || S.platform === "k8s" || S.platform === "all";
     if (box.hidden) return;
     const list = S.rules || [];
     $("#ruleList").innerHTML = list.length
@@ -1051,7 +1060,7 @@
   };
   function renderGuide() {
     const g = $("#guide");
-    const topic = S.page === "hosts" ? "hosts" : S.page === "accounts" && S.platform !== "all" ? (S.platform === "npm" ? "npm" : S.platform === "ssh" ? "ssh" : "git") : null;
+    const topic = S.page === "hosts" ? "hosts" : S.page === "accounts" && S.platform !== "all" && S.platform !== "k8s" ? (S.platform === "npm" ? "npm" : S.platform === "ssh" ? "ssh" : "git") : null;
     if (!topic) {
       g.hidden = true;
       return;
@@ -1075,7 +1084,7 @@
     renderSub();
     document.querySelectorAll("#scopeSeg button").forEach((b) => b.classList.toggle("on", b.dataset.scope === S.scope));
     const isRepo = S.scope === "repo";
-    const noScope = S.platform === "ssh" || S.platform === "all"; // SSH server không liên quan repo; "Tất cả" chỉ để xem
+    const noScope = S.platform === "ssh" || S.platform === "k8s" || S.platform === "all"; // SSH server không liên quan repo; "Tất cả" chỉ để xem
     $("#repoBar").hidden = !isRepo || noScope;
     $("#repoPath").textContent = S.repo || t("Chưa chọn thư mục");
     $("#clearRepo").hidden = !S.repo;
@@ -1098,8 +1107,7 @@
     const curPlat = platformList().find((p) => p.id === S.platform);
     $("#pageTitle").textContent =
       S.page === "accounts" && curPlat ? `${t(PAGES.accounts.title)} · ${curPlat.name}` : t(PAGES[S.page].title);
-    const gv = S.current?.git_version ? " · " + S.current.git_version : "";
-    $("#pageSub").textContent = t(PAGES[S.page].sub) + (S.page === "accounts" ? gv : "");
+    $("#pageSub").textContent = t(PAGES[S.page].sub);
     $("#scopeSeg").hidden = S.page !== "accounts" || noScope;
     $("#refreshBtn").hidden = S.page === "stats";
     renderGuide();
@@ -1133,7 +1141,20 @@
   // ───────── hành động ─────────
   async function useProfile(id) {
     const p = S.profiles.find((x) => x.id === id);
-    if (S.scope === "repo" && !S.repo) return toast(t("Hãy chọn thư mục repo trước."), "bad");
+    const k8s = p.kind === "k8s";
+    if (!k8s && S.scope === "repo" && !S.repo) return toast(t("Hãy chọn thư mục repo trước."), "bad");
+    if (k8s && p.env === "prod") {
+      let yes = false;
+      try {
+        yes = await dialogApi.ask(
+          t("“{n}” là cluster PRODUCTION. Mọi lệnh kubectl từ giờ sẽ chạy trên cluster này. Tiếp tục?", { n: p.name }),
+          { title: t("Xác nhận cluster production"), kind: "warning" }
+        );
+      } catch {
+        yes = window.confirm(t("“{n}” là cluster PRODUCTION. Tiếp tục?", { n: p.name }));
+      }
+      if (!yes) return;
+    }
     S.busy = "use:" + id;
     renderCards();
     try {
@@ -1144,6 +1165,8 @@
         convertRemote: S.scope === "repo" && S.convert,
       });
       toast(t("Đã chuyển sang “{n}”", { n: p.name }), "ok");
+      const bk = (lines || []).find((l) => l.startsWith("Đã sao lưu file cũ"));
+      if (bk) setTimeout(() => toast(tr(bk), "ok"), 3300);
     } catch (e) {
       toast(tr(e), "bad");
     } finally {
@@ -1198,11 +1221,27 @@
     $("#authSsh").hidden = a !== "ssh";
     $("#authToken").hidden = a !== "token";
   }
+  function setEnv(e) {
+    S.env = e || "";
+    document.querySelectorAll("#envSeg button").forEach((b) => b.classList.toggle("on", b.dataset.env === S.env));
+  }
+  document.querySelectorAll("#envSeg button").forEach((b) => b.addEventListener("click", () => setEnv(b.dataset.env)));
+  $("#viewKube").addEventListener("click", async () => {
+    try {
+      $("#f_kube").value = await invoke("reveal_secret", { id: S.editId });
+      $("#viewKube").hidden = true;
+    } catch (e) {
+      toast(tr(e), "bad");
+    }
+  });
   function setKind(k) {
     S.kind = k;
     const npm = k === "npm";
     const ssh = k === "ssh";
     const git = k === "git";
+    const k8s = k === "k8s";
+    $("#k8sFields").hidden = !k8s;
+    $("#authSet").hidden = k8s;
     $("#hostLabel").hidden = !git;
     $("#registryLabel").hidden = !npm;
     $("#npmFields").hidden = !npm;
@@ -1216,6 +1255,7 @@
     // tạo/xem public key chỉ dành cho tài khoản Git; tài khoản SSH giữ nguyên như cũ
     $("#genKey").parentElement.hidden = !git;
     if (!git) $("#pubBox").hidden = true;
+    $("#gitIdent").hidden = !git;
     $("#authLegend").textContent = npm ? t("Token truy cập (npm access token)") : ssh ? t("Key SSH (tuỳ chọn)") : t("Cách đăng nhập");
     $("#tokenLbl").textContent = npm ? "Token" : "Personal Access Token";
     $("#tokenHint").hidden = npm;
@@ -1266,7 +1306,12 @@
     $("#clearPPBox").hidden = !hasPP;
     $("#f_clearpp").checked = false;
     $("#f_sshpp").placeholder = hasPP ? t("Đã lưu — để trống nếu giữ nguyên") : t("Chỉ cần nếu key của bạn có đặt passphrase");
-    setKind(p ? p.kind || "git" : S.platform === "npm" ? "npm" : S.platform === "ssh" ? "ssh" : "git");
+    setEnv(p?.env ?? "");
+    $("#f_kube").value = "";
+    $("#f_kube").placeholder = p?.kind === "k8s" ? t("Đã lưu (mã hoá) — để trống nếu giữ nguyên") : "apiVersion: v1\nkind: Config\nclusters:\n- cluster:\n    server: https://…";
+    $("#viewKube").textContent = t("Xem kubeconfig đã lưu");
+    $("#viewKube").hidden = !(p && p.kind === "k8s");
+    setKind(p ? p.kind || "git" : S.platform === "npm" ? "npm" : S.platform === "ssh" ? "ssh" : S.platform === "k8s" ? "k8s" : "git");
     dlg.showModal();
     $("#f_name").focus();
   }
@@ -1439,6 +1484,8 @@
         kind: S.kind,
         registry: $("#f_registry").value,
         scope: $("#f_scope").value,
+        kubeconfig: S.kind === "k8s" ? $("#f_kube").value : "",
+        env: S.kind === "k8s" ? S.env || "" : "",
       };
       const saved = await invoke("save_profile", { input });
       await invoke("rules_sync").catch(() => {});
@@ -1588,6 +1635,8 @@
       // "Tất cả" không có công tắc phạm vi, nên luôn xem theo toàn máy
       S.scope = "global";
       store.set("scope", S.scope);
+      await loadCurrent();
+    } else if (S.platform === "k8s") {
       await loadCurrent();
     }
     render();

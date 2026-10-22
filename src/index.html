@@ -304,6 +304,22 @@
         <p class="hint">Bạn có thể dùng mật khẩu, key (RSA, ED25519, ECDSA… mọi loại key OpenSSH) hoặc cả hai. Mật khẩu lưu trong kho bảo mật của hệ điều hành và được tự điền khi kết nối. Không có cả hai thì terminal sẽ hỏi.</p>
       </div>
 
+      <div id="k8sFields" hidden>
+        <label>Môi trường
+          <div class="seg" id="envSeg">
+            <button type="button" data-env="">Không đánh dấu</button>
+            <button type="button" data-env="dev">dev</button>
+            <button type="button" data-env="staging">staging</button>
+            <button type="button" data-env="prod">production</button>
+          </div>
+        </label>
+        <label>Kubeconfig
+          <textarea id="f_kube" rows="6" spellcheck="false"></textarea>
+        </label>
+        <button type="button" id="viewKube" class="btn ghost" hidden>Xem kubeconfig đã lưu</button>
+        <p class="hint">Dán nội dung kubeconfig đã nhúng sẵn chứng chỉ (lấy bằng <code>kubectl config view --flatten --minify --raw</code>). App mã hoá nội dung này thành file riêng, khoá nằm trong kho bảo mật của hệ điều hành. Khi bấm “Dùng tài khoản này”, app ghi vào <code>~/.kube/config</code> và sao lưu file cũ của bạn nếu có. Cluster đánh dấu production sẽ hỏi xác nhận trước khi đổi.</p>
+      </div>
+
       <div id="npmFields" hidden>
         <label>Scope (tuỳ chọn)
           <input id="f_scope" placeholder="@congty" />

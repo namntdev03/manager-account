@@ -46,6 +46,12 @@ struct Profile {
     /// npm: scope tuỳ chọn, ví dụ @congty (trống = registry mặc định)
     #[serde(default)]
     scope: String,
+    /// Kubernetes: môi trường "prod" / "staging" / "dev" (trống = không đánh dấu)
+    #[serde(default)]
+    env: String,
+    /// Kubernetes: tên context hiện tại trong kubeconfig
+    #[serde(default)]
+    context: String,
 }
 
 fn default_kind() -> String {
@@ -67,6 +73,9 @@ struct ProfileInput {
     kind: Option<String>,
     registry: Option<String>,
     scope: Option<String>,
+    /// Kubernetes: nội dung kubeconfig (trống = giữ nguyên) và môi trường
+    kubeconfig: Option<String>,
+    env: Option<String>,
     /// SSH: passphrase của key (trống = giữ nguyên)
     passphrase: Option<String>,
     /// SSH: xoá passphrase đã lưu
@@ -388,6 +397,8 @@ fn save_ssh_profile(app: &tauri::AppHandle, input: ProfileInput) -> Result<Profi
         kind: "ssh".to_string(),
         registry: String::new(),
         scope: String::new(),
+        env: String::new(),
+        context: String::new(),
     };
     if let Some(i) = list.iter().position(|x| x.id == id) {
         list[i] = p.clone();
@@ -1361,7 +1372,9 @@ async fn backup_export(app: tauri::AppHandle, passphrase: String, path: String) 
         let profiles = load_profiles(&app)?;
         let mut items: Vec<ProfileBackup> = vec![];
         for p in profiles {
-            let secret = if p.has_token {
+            let secret = if p.kind == "k8s" {
+                kube_load(&app, &p.id).ok()
+            } else if p.has_token {
                 entry(&p.id).ok().and_then(|e| e.get_password().ok())
             } else {
                 None
@@ -1509,9 +1522,13 @@ async fn backup_import(
                 b.profile.ssh_key_path = write_key(&app, &b.profile.id, k)?;
             }
             if let Some(s) = b.secret.as_deref() {
-                entry(&b.profile.id)?
-                    .set_password(s)
-                    .map_err(|e| format!("Không lưu được vào keychain: {e}"))?;
+                if b.profile.kind == "k8s" {
+                    kube_store(&app, &b.profile.id, s)?;
+                } else {
+                    entry(&b.profile.id)?
+                        .set_password(s)
+                        .map_err(|e| format!("Không lưu được vào keychain: {e}"))?;
+                }
                 b.profile.has_token = true;
             }
             if let Some(s) = b.passphrase.as_deref() {
@@ -1990,6 +2007,208 @@ async fn list_profiles(app: tauri::AppHandle) -> Result<Vec<Profile>, String> {
     load_profiles(&app)
 }
 
+// ───────────────────────── Kubernetes (kubeconfig) ─────────────────────────
+// Kubeconfig dài và chứa chứng chỉ/token, vượt giới hạn của Credential Manager (Windows),
+// nên được mã hoá (ChaCha20-Poly1305) thành file; khoá 32 byte nằm trong keychain của hệ điều hành.
+
+const KUBE_MARK: &str = "# managed-by: Manager Account\n";
+
+fn kube_path(app: &tauri::AppHandle, id: &str) -> Result<PathBuf, String> {
+    Ok(data_dir(app)?.join("kube").join(format!("{id}.enc")))
+}
+
+fn kube_store(app: &tauri::AppHandle, id: &str, text: &str) -> Result<(), String> {
+    use chacha20poly1305::aead::{Aead, KeyInit};
+    let ent = entry(id)?;
+    let existing = ent.get_password().ok().and_then(|s| B64.decode(s).ok()).filter(|k| k.len() == 32);
+    let key: Vec<u8> = match existing {
+        Some(k) => k,
+        None => {
+            let mut k = [0u8; 32];
+            getrandom::getrandom(&mut k).map_err(|e| e.to_string())?;
+            ent.set_password(&B64.encode(k))
+                .map_err(|e| format!("Không lưu được khoá mã hoá vào keychain: {e}"))?;
+            k.to_vec()
+        }
+    };
+    let mut nonce = [0u8; 12];
+    getrandom::getrandom(&mut nonce).map_err(|e| e.to_string())?;
+    let cipher = chacha20poly1305::ChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(&key));
+    let ct = cipher
+        .encrypt(chacha20poly1305::Nonce::from_slice(&nonce), text.as_bytes())
+        .map_err(|_| "Không mã hoá được kubeconfig".to_string())?;
+    let mut out = nonce.to_vec();
+    out.extend(ct);
+    let path = kube_path(app, id)?;
+    if let Some(d) = path.parent() {
+        fs::create_dir_all(d).map_err(|e| e.to_string())?;
+    }
+    fs::write(&path, out).map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+    }
+    Ok(())
+}
+
+fn kube_load(app: &tauri::AppHandle, id: &str) -> Result<String, String> {
+    use chacha20poly1305::aead::{Aead, KeyInit};
+    let key = entry(id)?
+        .get_password()
+        .ok()
+        .and_then(|s| B64.decode(s).ok())
+        .filter(|k| k.len() == 32)
+        .ok_or("Không đọc được khoá mã hoá kubeconfig từ keychain")?;
+    let raw = fs::read(kube_path(app, id)?).map_err(|_| "Chưa có kubeconfig nào được lưu cho cluster này".to_string())?;
+    if raw.len() < 13 {
+        return Err("File kubeconfig đã lưu bị hỏng".into());
+    }
+    let (nonce, ct) = raw.split_at(12);
+    let cipher = chacha20poly1305::ChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(&key));
+    let plain = cipher
+        .decrypt(chacha20poly1305::Nonce::from_slice(nonce), ct)
+        .map_err(|_| "Không giải mã được kubeconfig (sai khoá hoặc file bị hỏng)".to_string())?;
+    String::from_utf8(plain).map_err(|_| "kubeconfig đã lưu không đọc được".to_string())
+}
+
+fn kube_remove(app: &tauri::AppHandle, id: &str) {
+    if let Ok(p) = kube_path(app, id) {
+        let _ = fs::remove_file(p);
+    }
+}
+
+/// Giá trị của một khoá YAML đơn giản (dòng `key: value`), đủ cho current-context / server.
+fn kube_field(text: &str, key: &str) -> Option<String> {
+    for l in text.lines() {
+        let t = l.trim();
+        if let Some(rest) = t.strip_prefix(key) {
+            if let Some(v) = rest.strip_prefix(':') {
+                let v = v.trim().trim_matches('"').trim_matches('\'');
+                if !v.is_empty() {
+                    return Some(v.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+fn kube_validate(text: &str) -> Result<(), String> {
+    if !text.contains("clusters:") || kube_field(text, "server").is_none() {
+        return Err("Nội dung này không giống kubeconfig (thiếu clusters / server)".into());
+    }
+    for key in ["certificate-authority", "client-certificate", "client-key", "tokenFile"] {
+        if kube_field(text, key).is_some() {
+            return Err(format!(
+                "kubeconfig đang tham chiếu file ngoài (`{key}`), nên sao lưu sang máy khác sẽ thiếu. \
+                 Hãy xuất bản nhúng sẵn: kubectl config view --flatten --minify --raw"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn kube_server_host(text: &str) -> String {
+    let s = kube_field(text, "server").unwrap_or_default();
+    let s = s.split("://").last().unwrap_or("").to_string();
+    s.split('/').next().unwrap_or("").to_string()
+}
+
+fn kube_config_path() -> PathBuf {
+    PathBuf::from(home()).join(".kube").join("config")
+}
+
+/// Ghi kubeconfig thành ~/.kube/config. File đang có (không do app quản lý) được sao lưu trước.
+fn kube_apply(text: &str) -> Result<Option<PathBuf>, String> {
+    let path = kube_config_path();
+    if let Some(d) = path.parent() {
+        fs::create_dir_all(d).map_err(|e| e.to_string())?;
+    }
+    let mut backup = None;
+    if let Ok(old) = fs::read_to_string(&path) {
+        if !old.trim().is_empty() && !old.starts_with(KUBE_MARK) {
+            let ts = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+            let b = path.with_file_name(format!("config.backup-{ts}"));
+            fs::copy(&path, &b).map_err(|e| format!("Không sao lưu được ~/.kube/config: {e}"))?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = fs::set_permissions(&b, fs::Permissions::from_mode(0o600));
+            }
+            backup = Some(b);
+        }
+    }
+    let mut body = String::from(KUBE_MARK);
+    body.push_str(text.replace("\r\n", "\n").trim_end());
+    body.push('\n');
+    fs::write(&path, body).map_err(|e| format!("Không ghi được ~/.kube/config: {e}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+    }
+    Ok(backup)
+}
+
+/// Cluster đang dùng = ~/.kube/config trỏ cùng server và context (kubectl có thể ghi lại file nên không so từng chữ).
+fn kube_is_active(app: &tauri::AppHandle, p: &Profile) -> bool {
+    let Ok(cur) = fs::read_to_string(kube_config_path()) else { return false };
+    let Ok(mine) = kube_load(app, &p.id) else { return false };
+    let s1 = kube_field(&cur, "server");
+    s1.is_some()
+        && s1 == kube_field(&mine, "server")
+        && kube_field(&cur, "current-context") == kube_field(&mine, "current-context")
+}
+
+fn save_k8s_profile(app: &tauri::AppHandle, input: ProfileInput) -> Result<Profile, String> {
+    let mut list = load_profiles(app)?;
+    let name = input.name.trim().to_string();
+    if name.is_empty() {
+        return Err("Cần nhập tên hiển thị".into());
+    }
+    let id = input.id.clone().filter(|s| !s.is_empty()).unwrap_or_else(new_id);
+    let existing = list.iter().find(|p| p.id == id).cloned();
+    let given = input.kubeconfig.as_deref().map(str::trim).unwrap_or("");
+    let text = if !given.is_empty() {
+        kube_validate(given)?;
+        kube_store(app, &id, given)?;
+        given.to_string()
+    } else if existing.as_ref().map(|e| e.has_token).unwrap_or(false) {
+        kube_load(app, &id)?
+    } else {
+        return Err("Hãy dán nội dung kubeconfig".into());
+    };
+    let env = match input.env.as_deref().map(str::trim).unwrap_or("") {
+        e @ ("prod" | "staging" | "dev") => e.to_string(),
+        _ => String::new(),
+    };
+    let p = Profile {
+        id: id.clone(),
+        name,
+        host: kube_server_host(&text),
+        user_name: String::new(),
+        user_email: String::new(),
+        auth: "token".to_string(),
+        login: String::new(),
+        ssh_key_path: String::new(),
+        has_token: true,
+        has_passphrase: false,
+        kind: "k8s".to_string(),
+        registry: String::new(),
+        scope: String::new(),
+        env,
+        context: kube_field(&text, "current-context").unwrap_or_default(),
+    };
+    if let Some(i) = list.iter().position(|x| x.id == id) {
+        list[i] = p.clone();
+    } else {
+        list.push(p.clone());
+    }
+    save_profiles(app, &list)?;
+    Ok(p)
+}
+
 fn save_npm_profile(app: &tauri::AppHandle, input: ProfileInput) -> Result<Profile, String> {
     let mut list = load_profiles(app)?;
     let name = input.name.trim().to_string();
@@ -2020,6 +2239,8 @@ fn save_npm_profile(app: &tauri::AppHandle, input: ProfileInput) -> Result<Profi
         kind: "npm".to_string(),
         registry,
         scope,
+        env: String::new(),
+        context: String::new(),
     };
     let tok = input.token.as_deref().map(str::trim).unwrap_or("");
     if !tok.is_empty() {
@@ -2050,6 +2271,9 @@ async fn save_profile(app: tauri::AppHandle, input: ProfileInput) -> Result<Prof
     if input.kind.as_deref() == Some("ssh") {
         return save_ssh_profile(&app, input);
     }
+    if input.kind.as_deref() == Some("k8s") {
+        return save_k8s_profile(&app, input);
+    }
     let mut list = load_profiles(&app)?;
     let name = input.name.trim().to_string();
     let host = norm_host(&input.host);
@@ -2079,6 +2303,8 @@ async fn save_profile(app: tauri::AppHandle, input: ProfileInput) -> Result<Prof
         kind: "git".to_string(),
         registry: String::new(),
         scope: String::new(),
+        env: String::new(),
+        context: String::new(),
     };
 
     match input.auth.as_str() {
@@ -2140,6 +2366,9 @@ async fn reveal_secret(app: tauri::AppHandle, id: String) -> Result<String, Stri
     require_auth(&app).await?;
     let list = load_profiles(&app)?;
     let p = list.iter().find(|x| x.id == id).ok_or("Không tìm thấy tài khoản")?;
+    if p.kind == "k8s" {
+        return kube_load(&app, &p.id);
+    }
     if p.auth == "token" {
         return entry(&p.id)?
             .get_password()
@@ -2184,6 +2413,9 @@ async fn delete_profile(app: tauri::AppHandle, id: String) -> Result<(), String>
     if let Ok(e) = entry(&pp_key(&id)) {
         let _ = e.delete_credential();
     }
+    if p.kind == "k8s" {
+        kube_remove(&app, &id);
+    }
     if p.auth == "token" && !p.login.is_empty() {
         let input = format!("protocol=https\nhost={}\nusername={}\n\n", p.host, p.login);
         let _ = git(None, &["credential", "reject"], Some(input.as_str()));
@@ -2204,8 +2436,21 @@ async fn apply_profile(
     convert_remote: bool,
 ) -> Result<Vec<String>, String> {
     let p = find_profile(&app, &id)?;
-    let t = target(&scope, repo_path)?;
     let mut log: Vec<String> = vec![];
+    if p.kind == "k8s" {
+        let text = kube_load(&app, &p.id)?;
+        let backup = kube_apply(&text)?;
+        log.push(format!(
+            "~/.kube/config -> {} (context: {})",
+            p.name,
+            if p.context.is_empty() { "mặc định".to_string() } else { p.context.clone() }
+        ));
+        if let Some(b) = backup {
+            log.push(format!("Đã sao lưu file cũ: {}", b.display()));
+        }
+        return Ok(log);
+    }
+    let t = target(&scope, repo_path)?;
     let where_ = if t.repo.is_some() { "repo" } else { "toàn máy" };
 
     if p.kind == "ssh" {
@@ -2318,6 +2563,9 @@ async fn get_current(
             if p.kind == "ssh" {
                 return false;
             }
+            if p.kind == "k8s" {
+                return kube_is_active(&app, p);
+            }
             if p.kind == "npm" {
                 let path = npmrc_path(repo);
                 let have = npmrc_get(&path, &npm_auth_key(&p.registry));
@@ -2356,6 +2604,31 @@ async fn test_profile(app: tauri::AppHandle, id: String) -> Result<TestResult, S
             ok: false,
             message: "Tài khoản SSH được thử bằng cách kết nối tới một SSH host.".into(),
         });
+    }
+    if p.kind == "k8s" {
+        let text = kube_load(&app, &p.id)?;
+        let tmp = data_dir(&app)?.join("kube").join(format!("{}.test.yaml", p.id));
+        fs::write(&tmp, &text).map_err(|e| e.to_string())?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600));
+        }
+        let tmp_s = tmp.to_string_lossy().to_string();
+        let mut c = new_cmd("kubectl");
+        c.args(["--kubeconfig", tmp_s.as_str(), "get", "--raw", "/version", "--request-timeout=10s"]);
+        let res = tauri::async_runtime::spawn_blocking(move || run_cmd(c, None))
+            .await
+            .map_err(|e| e.to_string())?;
+        let _ = fs::remove_file(&tmp);
+        let o = res?;
+        if !o.ok {
+            let e = if o.stderr.is_empty() { o.stdout } else { o.stderr };
+            return Ok(TestResult { ok: false, message: format!("Không kết nối được cluster: {e}") });
+        }
+        let v: serde_json::Value = serde_json::from_str(&o.stdout).unwrap_or(serde_json::Value::Null);
+        let ver = v["gitVersion"].as_str().unwrap_or("?");
+        return Ok(TestResult { ok: true, message: format!("Kết nối được - Kubernetes {ver}") });
     }
     if p.kind == "npm" {
         let token = entry(&p.id)?
