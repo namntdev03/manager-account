@@ -1823,6 +1823,7 @@ fn spawn_pty(app: &tauri::AppHandle, mut cmd: CommandBuilder, cols: u16, rows: u
 const DETECT_SCRIPT: &str = r#"export PATH="$PATH:/usr/local/bin:/opt/homebrew/bin:/usr/sbin:/snap/bin"
 for d in /usr/pgsql-*/bin /usr/lib/postgresql/*/bin /opt/homebrew/opt/postgresql@*/bin; do [ -d "$d" ] && PATH="$PATH:$d"; done
 v() { if command -v "$1" >/dev/null 2>&1; then "$@" 2>&1 | head -1; fi; }
+if [ "$(uname -s)" = Darwin ]; then echo "pm=brew"; elif command -v apt-get >/dev/null 2>&1; then echo "pm=apt"; elif command -v dnf >/dev/null 2>&1; then echo "pm=dnf"; elif command -v yum >/dev/null 2>&1; then echo "pm=yum"; fi
 echo "docker=$(v docker --version)"
 echo "postgres=$(v psql --version)"
 echo "redis=$(v redis-server --version)"

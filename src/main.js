@@ -948,13 +948,18 @@
     depSt.loading = true;
     depSt.err = "";
     depSt.ver = {};
+    depSt.pm = "";
     renderDepGrid();
     try {
       const out = await invoke("deploy_detect", { hostId: depTarget() || null, accountId: depTarget() ? depAcc() || null : null });
       if (depSt.key !== key) return; // người dùng đã đổi máy đích
       out.split("\n").forEach((l) => {
         const i = l.indexOf("=");
-        if (i > 0) depSt.ver[l.slice(0, i).trim()] = depVerOf(l.slice(i + 1));
+        if (i > 0) {
+          const k = l.slice(0, i).trim();
+          if (k === "pm") depSt.pm = l.slice(i + 1).trim();
+          else depSt.ver[k] = depVerOf(l.slice(i + 1));
+        }
       });
     } catch (e) {
       if (depSt.key === key) depSt.err = tr(e);
@@ -1029,7 +1034,23 @@
         : t("Không lấy được danh sách mới, đang dùng danh sách có sẵn trong app (có thể đã cũ).");
     depRefreshScript();
   }
+  // Cảnh báo khi hệ đích không cài đúng được phiên bản người dùng đã chọn
+  function depPinWarn() {
+    const pm = depSt.pm, id = dep.app.id, v = dep.ver;
+    if (!pm) return "";
+    if (pm === "brew") {
+      if (id === "docker") return t("macOS cài Docker Desktop bằng Homebrew nên không chọn được phiên bản; sẽ cài bản mới nhất.");
+      if (id === "redis" && v) return t("Homebrew luôn cài Redis bản mới nhất, nên phiên bản bạn chọn ({v}) sẽ KHÔNG được áp dụng và máy có thể bị nâng lên bản mới hơn.", { v });
+      if (id === "nginx" && v !== "mainline") return t("Homebrew chỉ có nginx bản mainline mới nhất, nên lựa chọn “{v}” sẽ KHÔNG được áp dụng.", { v });
+    }
+    if ((pm === "dnf" || pm === "yum") && id === "redis" && v)
+      return t("Hệ này cài Redis theo repo của bản phân phối, nên phiên bản bạn chọn ({v}) có thể KHÔNG được áp dụng.", { v });
+    return "";
+  }
   function depRefreshScript() {
+    const w = depPinWarn();
+    $("#depPin").hidden = !w;
+    $("#depPin").textContent = w ? "⚠ " + w : "";
     $("#depScript").value = DEPLOY.script(dep.app.id, dep.ver);
     document.querySelectorAll("#depVer button").forEach((b) => b.classList.toggle("on", b.dataset.v === dep.ver));
   }
