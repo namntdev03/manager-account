@@ -602,3 +602,12 @@ body::after { bottom: 0; background: linear-gradient(to top, var(--bg), rgba(244
 #depGo.danger { background: #b91c1c; border-color: #b91c1c; }
 #depGo.danger:hover { background: #991b1b; }
 #depGo.danger:disabled { opacity: .45; }
+.dep-bar { height: 12px; border-radius: 99px; background: #e5e7eb; overflow: hidden; }
+#depBar { display: block; height: 100%; width: 0; background: #000; border-radius: 99px; transition: width .5s ease; }
+#depBar.ok { background: #16a34a; }
+#depBar.err { background: #b91c1c; }
+#depProgTxt { margin: 10px 0 0; }
+#depPwRow { display: flex; gap: 8px; margin-top: 12px; }
+#depPwRow input { flex: 1; }
+#depTermBox > summary { cursor: pointer; font-size: 13px; color: #6b7280; margin-top: 12px; user-select: none; }
+#depTermBox[open] > summary { margin-bottom: 10px; }

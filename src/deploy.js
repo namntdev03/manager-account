@@ -43,6 +43,8 @@ if command -v port >/dev/null 2>&1; then HAS_PORT=1; fi
 brew_has() { if [ "$HAS_BREW" = 1 ] && brew list --formula "$1" >/dev/null 2>&1; then return 0; fi; return 1; }
 brew_cask() { if [ "$HAS_BREW" = 1 ] && brew list --cask "$1" >/dev/null 2>&1; then return 0; fi; return 1; }
 port_has() { if [ "$HAS_PORT" = 1 ] && [ -n "$(port -q installed "$1" 2>/dev/null)" ]; then return 0; fi; return 1; }
+begin() { TOTAL="$1"; STEP=0; }
+step() { STEP=$((STEP+1)); echo "##P $STEP $TOTAL $1"; }
 confirm_del() {
   printf "ĐÂY LÀ XOÁ VĨNH VIỄN, không khôi phục được. Gõ XOA để tiếp tục: "
   read -r ans
@@ -256,37 +258,49 @@ case "$PM" in
     show_path /etc/docker
     ;;
 esac
-confirm_del
 case "$PM" in
   brew|mac)
+    begin 4
+    step "Dừng Docker Desktop"
     osascript -e 'quit app "Docker"' >/dev/null 2>&1 || true
     sleep 3
+    step "Gỡ ứng dụng Docker"
     if brew_cask docker; then brew uninstall --cask --zap docker || echo "Không gỡ được cask docker bằng brew."; fi
     if brew_has docker; then brew uninstall --force docker || echo "Không gỡ được formula docker bằng brew."; fi
     rmp /Applications/Docker.app
+    step "Dọn liên kết dòng lệnh"
     for l in /usr/local/bin/*; do
       if [ -L "$l" ] && readlink "$l" | grep -q "Docker.app"; then
         echo "  xoá liên kết $l"
         rm -f "$l" 2>/dev/null || $SUDO rm -f "$l"
       fi
     done
+    step "Xoá dữ liệu và cấu hình"
     rmp "$HOME/.docker" "$HOME/Library/Containers/com.docker.docker" "$HOME/Library/Group Containers/group.com.docker" "$HOME/Library/Application Support/Docker Desktop"
     ;;
   apt)
+    begin 3
+    step "Dừng dịch vụ Docker"
     $SUDO systemctl disable --now docker.service docker.socket containerd.service 2>/dev/null || true
+    step "Gỡ các gói Docker"
     PK="$(dpkg -l | awk '/^ii/ {print $2}' | grep -E '^(docker-ce|docker-ce-cli|containerd.io|docker-buildx-plugin|docker-compose-plugin|docker-ce-rootless-extras|docker-model-plugin)$' || true)"
     if [ -n "$PK" ]; then $SUDO apt-get purge -y $PK; fi
-    $SUDO apt-get autoremove -y --purge || true
+    step "Xoá dữ liệu và repo"
     rmp /var/lib/docker /var/lib/containerd /etc/docker /etc/apt/sources.list.d/docker.list /etc/apt/keyrings/docker.asc /etc/apt/keyrings/docker.gpg
     ;;
   dnf|yum)
+    begin 3
+    step "Dừng dịch vụ Docker"
     $SUDO systemctl disable --now docker.service docker.socket containerd.service 2>/dev/null || true
+    step "Gỡ các gói Docker"
     PK="$(rpm -qa --qf '%{NAME}\n' | grep -E '^(docker-ce|docker-ce-cli|containerd.io|docker-buildx-plugin|docker-compose-plugin|docker-ce-rootless-extras)$' || true)"
     if [ -n "$PK" ]; then $SUDO $PM remove -y $PK; fi
+    step "Xoá dữ liệu và repo"
     rmp /var/lib/docker /var/lib/containerd /etc/docker /etc/yum.repos.d/docker-ce.repo
     ;;
 esac
 echo "Đã gỡ Docker và xoá dữ liệu. Nhóm người dùng 'docker' (nếu có) được giữ lại, không ảnh hưởng."
+echo "##P done"
 `;
 
   const POSTGRES_UN = String.raw`echo "=== Gỡ PostgreSQL và xoá sạch dữ liệu ==="
@@ -323,33 +337,43 @@ case "$PM" in
     show_path "$HOME/Library/Application Support/Postgres"
     ;;
 esac
-confirm_del
 case "$PM" in
   apt)
+    begin 3
+    step "Dừng PostgreSQL"
     $SUDO systemctl stop postgresql 2>/dev/null || true
+    step "Gỡ các gói PostgreSQL"
     if [ -n "$PK" ]; then $SUDO apt-get purge -y $PK; fi
-    $SUDO apt-get autoremove -y --purge || true
+    step "Xoá dữ liệu và repo"
     rmp /var/lib/postgresql /etc/postgresql /etc/postgresql-common /var/log/postgresql /etc/apt/sources.list.d/pgdg.list /etc/apt/sources.list.d/pgdg.sources /usr/share/postgresql-common/pgdg
     $SUDO userdel postgres 2>/dev/null || true
     ;;
   dnf|yum)
+    begin 3
+    step "Dừng PostgreSQL"
     for u in $(systemctl list-unit-files --no-legend 'postgresql*' 2>/dev/null | awk '{print $1}'); do $SUDO systemctl disable --now "$u" 2>/dev/null || true; done
+    step "Gỡ các gói PostgreSQL"
     if [ -n "$PK" ]; then $SUDO $PM remove -y $PK; fi
+    step "Xoá dữ liệu"
     rmp /var/lib/pgsql
     for d in /usr/pgsql-*; do rmp "$d"; done
     $SUDO userdel postgres 2>/dev/null || true
     ;;
   brew|mac)
+    begin 3
+    step "Gỡ PostgreSQL (Homebrew)"
     for f in $PK; do
       brew services stop "$f" || true
       brew uninstall --force "$f" || echo "Không gỡ được $f (có gói khác phụ thuộc?)."
       rmp "$BP/var/$f"
     done
     if [ "$HAS_BREW" = 1 ]; then rmp "$BP/var/postgres"; fi
+    step "Gỡ PostgreSQL (MacPorts)"
     if [ -n "$PORTPK" ]; then
       $SUDO port -N uninstall $PORTPK || echo "Không gỡ được một số gói MacPorts."
       for d in /opt/local/var/db/postgresql*; do rmp "$d"; done
     fi
+    step "Gỡ Postgres.app"
     if [ -d /Applications/Postgres.app ]; then
       osascript -e 'quit app "Postgres"' >/dev/null 2>&1 || true
       sleep 2
@@ -358,6 +382,7 @@ case "$PM" in
     ;;
 esac
 echo "Đã gỡ PostgreSQL và xoá dữ liệu."
+echo "##P done"
 `;
 
   const REDIS_UN = String.raw`echo "=== Gỡ Redis và xoá sạch dữ liệu ==="
@@ -386,35 +411,46 @@ case "$PM" in
     show_path "$HOME/.local/redis"
     ;;
 esac
-confirm_del
 case "$PM" in
   apt)
+    begin 3
+    step "Dừng Redis"
     $SUDO systemctl disable --now redis-server redis-sentinel 2>/dev/null || true
+    step "Gỡ các gói Redis"
     PK="$(dpkg -l | awk '/^ii/ {print $2}' | grep -E '^(redis|redis-server|redis-tools|redis-sentinel)$' || true)"
     if [ -n "$PK" ]; then $SUDO apt-get purge -y $PK; fi
-    $SUDO apt-get autoremove -y --purge || true
+    step "Xoá dữ liệu và repo"
     rmp /var/lib/redis /etc/redis /var/log/redis /etc/apt/sources.list.d/redis.list /usr/share/keyrings/redis-archive-keyring.gpg
     ;;
   dnf|yum)
+    begin 3
+    step "Dừng Redis"
     $SUDO systemctl disable --now redis redis-sentinel 2>/dev/null || true
+    step "Gỡ gói Redis"
     if rpm -q redis >/dev/null 2>&1; then $SUDO $PM remove -y redis; fi
+    step "Xoá dữ liệu"
     rmp /var/lib/redis /etc/redis /etc/redis.conf /etc/redis-sentinel.conf /var/log/redis
     ;;
   brew|mac)
+    begin 3
+    step "Gỡ Redis (Homebrew)"
     if brew_has redis; then
       brew services stop redis || true
       brew uninstall --force redis || echo "Không gỡ được redis bằng brew."
       rmp "$BP/var/db/redis" "$BP/etc/redis.conf" "$BP/etc/redis-sentinel.conf" "$BP/var/log/redis.log"
     fi
+    step "Gỡ Redis (MacPorts)"
     if port_has redis; then
       $SUDO port -N uninstall redis || echo "Không gỡ được redis bằng MacPorts."
       rmp /opt/local/var/db/redis
     fi
+    step "Gỡ Redis cài từ mã nguồn"
     pkill -f "$HOME/.local/redis" 2>/dev/null || true
     rmp "$HOME/.local/redis"
     ;;
 esac
 echo "Đã gỡ Redis và xoá dữ liệu."
+echo "##P done"
 `;
 
   const NGINX_UN = String.raw`echo "=== Gỡ Nginx và xoá sạch cấu hình ==="
@@ -431,26 +467,35 @@ case "$PM" in
     show_path /var/cache/nginx
     ;;
 esac
-confirm_del
 case "$PM" in
   apt)
+    begin 3
+    step "Dừng Nginx"
     $SUDO systemctl disable --now nginx 2>/dev/null || true
+    step "Gỡ các gói Nginx"
     PK="$(dpkg -l | awk '/^ii/ {print $2}' | grep -E '^nginx(-.*)?$' || true)"
     if [ -n "$PK" ]; then $SUDO apt-get purge -y $PK; fi
-    $SUDO apt-get autoremove -y --purge || true
+    step "Xoá cấu hình và repo"
     rmp /etc/nginx /var/log/nginx /var/cache/nginx /etc/apt/sources.list.d/nginx.list /etc/apt/preferences.d/99nginx /usr/share/keyrings/nginx-archive-keyring.gpg
     ;;
   dnf|yum)
+    begin 3
+    step "Dừng Nginx"
     $SUDO systemctl disable --now nginx 2>/dev/null || true
+    step "Gỡ gói Nginx"
     if rpm -q nginx >/dev/null 2>&1; then $SUDO $PM remove -y nginx; fi
+    step "Xoá cấu hình và repo"
     rmp /etc/nginx /var/log/nginx /var/cache/nginx /etc/yum.repos.d/nginx.repo
     ;;
   brew|mac)
+    begin 2
+    step "Gỡ Nginx (Homebrew)"
     if brew_has nginx; then
       brew services stop nginx || true
       brew uninstall --force nginx || echo "Không gỡ được nginx bằng brew."
       rmp "$BP/etc/nginx" "$BP/var/log/nginx" "$BP/var/run/nginx.pid"
     fi
+    step "Gỡ Nginx (MacPorts)"
     if port_has nginx; then
       $SUDO port -N uninstall nginx || echo "Không gỡ được nginx bằng MacPorts."
       rmp /opt/local/etc/nginx /opt/local/var/log/nginx
@@ -458,6 +503,7 @@ case "$PM" in
     ;;
 esac
 echo "Đã gỡ Nginx và xoá cấu hình."
+echo "##P done"
 `;
 
   const APPS = [

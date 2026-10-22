@@ -888,7 +888,7 @@
       const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
       const x = S.terms.find((q) => q.id === id);
       if (x) x.term.write(bytes);
-      else if (dep.id === id && dep.term) dep.term.write(bytes);
+      else if (dep.id === id && dep.term) depWrite(bytes);
       else (pendingData[id] = pendingData[id] || []).push(bytes);
     });
     T.event.listen("term-exit", (ev) => {
@@ -896,6 +896,7 @@
       if (!x && dep.id && dep.id === (ev.payload || {}).id) {
         dep.ended = true;
         dep.term.write(`\r\n\x1b[90m[${t("Đã kết thúc. Bạn có thể đóng cửa sổ này.")}]\x1b[0m\r\n`);
+        if (dep.mode === "uninstall") depProgFinish();
         depDetect(true);
         return;
       }
@@ -925,6 +926,65 @@
   // phiên bản có sẵn lấy từ nguồn chính thức: { loading, loaded, at, live: { docker: [...] }, errors: {} }
   const depLive = { loading: false, loaded: false, at: null, live: {}, errors: {} };
   const depVersionsOf = (a) => depLive.live[a.id] || a.versions;
+  // ── gỡ cài đặt: không hiện terminal, chỉ hiện thanh tiến trình đọc từ các dòng "##P" của script
+  const dec = new TextDecoder();
+  const depProg = { buf: "", done: false, step: 0, total: 1 };
+  function depProgReset() {
+    Object.assign(depProg, { buf: "", done: false, step: 0, total: 1 });
+    $("#depBar").style.width = "2%";
+    $("#depBar").className = "";
+    $("#depProgTxt").textContent = t("Đang chuẩn bị…");
+    $("#depPwRow").hidden = true;
+    $("#depPw").value = "";
+  }
+  function depProgFeed(bytes) {
+    depProg.buf += dec.decode(bytes, { stream: true }).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
+    const lines = depProg.buf.split(/\r?\n/);
+    depProg.buf = lines.pop(); // phần chưa xuống dòng (có thể là lời nhắc mật khẩu)
+    for (const l of lines) {
+      if (l.includes("##P done")) { depProg.done = true; continue; }
+      const m = /##P (\d+) (\d+) (.*)$/.exec(l);
+      if (m) {
+        depProg.step = +m[1];
+        depProg.total = Math.max(1, +m[2]);
+        $("#depBar").style.width = Math.max(4, Math.round(((depProg.step - 1) / depProg.total) * 100)) + "%";
+        $("#depProgTxt").textContent = `${t(m[3])} (${depProg.step}/${depProg.total})`;
+        $("#depPwRow").hidden = true;
+      }
+    }
+    if (/password[^\n]*:\s*$/i.test(depProg.buf) && !depProg.done) {
+      $("#depPwRow").hidden = false;
+      $("#depPw").placeholder = t("Mật khẩu sudo (chỉ gửi tới máy đích, không được lưu)");
+      $("#depProgTxt").textContent = t("Máy đích đang chờ mật khẩu sudo.");
+    }
+  }
+  function depProgFinish() {
+    $("#depPwRow").hidden = true;
+    if (depProg.done) {
+      $("#depBar").style.width = "100%";
+      $("#depBar").className = "ok";
+      $("#depProgTxt").textContent = t("Đã gỡ xong và xoá sạch dữ liệu.");
+    } else {
+      $("#depBar").className = "err";
+      $("#depProgTxt").textContent = t("Gỡ không thành công. Mở “Xem chi tiết” để xem lỗi.");
+      $("#depTermBox").open = true;
+      try { dep.fit.fit(); } catch { /* ignore */ }
+    }
+  }
+  const depWrite = (bytes) => {
+    dep.term.write(bytes);
+    if (dep.mode === "uninstall") depProgFeed(bytes);
+  };
+  async function depSendPw() {
+    const v = $("#depPw").value;
+    $("#depPw").value = "";
+    $("#depPwRow").hidden = true;
+    depProg.buf = "";
+    if (dep.id && !dep.ended) await invoke("term_write", { id: dep.id, data: v + "\n" }).catch(() => {});
+  }
+  $("#depPwGo").addEventListener("click", depSendPw);
+  $("#depPw").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); depSendPw(); } });
+  $("#depTermBox").addEventListener("toggle", () => { if ($("#depTermBox").open && dep.fit) { try { dep.fit.fit(); dep.term.refresh(0, dep.term.rows - 1); } catch { /* ignore */ } } });
   async function depLoadVersions(force) {
     if (depLive.loading || (depLive.loaded && !force)) return;
     depLive.loading = true;
@@ -1173,6 +1233,11 @@
     $("#depDlg").close();
     $("#depRunTitle").textContent = t(dep.mode === "uninstall" ? "Đang gỡ {n}" : "Đang cài {n}", { n: name });
     $("#depRunSub").textContent = h ? t("Trên server {h}", { h: `${h.name} (${h.address})` }) : t("Trên máy này (local)");
+    const un = dep.mode === "uninstall";
+    $("#depProg").hidden = !un;
+    $("#depTermBox").open = !un;
+    $("#depTermBox > summary").hidden = !un;
+    if (un) depProgReset();
     $("#depRun").showModal();
     if (dep.term) { dep.term.dispose(); dep.term = null; }
     $("#depTerm").innerHTML = "";
@@ -1199,12 +1264,13 @@
         cols: dep.term.cols,
         rows: dep.term.rows,
       });
-      (pendingData[dep.id] || []).forEach((b) => dep.term.write(b));
+      (pendingData[dep.id] || []).forEach((b) => depWrite(b));
       delete pendingData[dep.id];
       dep.term.focus();
     } catch (e) {
       dep.term.write(`\r\n\x1b[31m${tr(e)}\x1b[0m\r\n`);
       dep.ended = true;
+      if (dep.mode === "uninstall") depProgFinish();
     }
   });
   $("#depRunClose").addEventListener("click", async () => {

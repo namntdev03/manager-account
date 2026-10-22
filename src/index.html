@@ -475,7 +475,20 @@
       <h3 id="depRunTitle">Đang cài đặt</h3>
       <p id="depRunSub"></p>
     </div>
-    <div class="dlg-body"><div id="depTerm" class="dep-term"></div></div>
+    <div class="dlg-body">
+      <div id="depProg" hidden>
+        <div class="dep-bar"><i id="depBar"></i></div>
+        <p id="depProgTxt" class="hint"></p>
+        <div id="depPwRow" hidden>
+          <input type="password" id="depPw" autocomplete="off" />
+          <button type="button" id="depPwGo" class="btn dark">Gửi</button>
+        </div>
+      </div>
+      <details id="depTermBox" open>
+        <summary>Xem chi tiết</summary>
+        <div id="depTerm" class="dep-term"></div>
+      </details>
+    </div>
     <div class="actions">
       <button type="button" id="depRunClose" class="btn dark">Đóng</button>
     </div>
