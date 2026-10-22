@@ -165,9 +165,9 @@ echo "Hoàn tất cài Nginx."
       desc: "Docker Engine + Compose plugin (script chính thức get.docker.com)",
       versions: [
         { v: "", label: "Mới nhất (stable)" },
+        { v: "29", label: "29.x" },
         { v: "28", label: "28.x" },
         { v: "27", label: "27.x" },
-        { v: "26", label: "26.x" },
       ],
       script: DOCKER,
     },
