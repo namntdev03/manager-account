@@ -571,3 +571,24 @@ body::after { bottom: 0; background: linear-gradient(to top, var(--bg), rgba(244
 .env-dev { background: #2563eb; }
 #viewKube { align-self: flex-start; margin-bottom: 8px; }
 #f_kube { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+
+/* Deployment */
+.dep-target { margin-bottom: 22px; padding: 18px 22px; display: block; }
+.dep-trow { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
+.dep-target .host-sec { margin-top: 0; }
+.dep-note { margin-top: 12px; font-size: 12px; color: rgba(255, 255, 255, .62); line-height: 1.5; }
+.dep-grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+.dep-app { appearance: none; text-align: left; font: inherit; color: var(--ink); background: #fff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 18px; display: grid; gap: 10px; align-content: start; cursor: pointer; transition: border-color .15s, transform .15s; }
+.dep-app:hover { border-color: #111; transform: translateY(-1px); }
+.dep-app .dep-ic { width: 38px; height: 38px; border-radius: 10px; background: #000; color: #fff; display: grid; place-items: center; }
+.dep-app .dep-ic .ic { width: 22px; height: 22px; }
+.dep-app b { font-size: 15px; letter-spacing: -.01em; }
+.dep-app span.d { font-size: 12px; color: var(--ink-3); line-height: 1.45; }
+.dep-app.soon { opacity: .5; cursor: default; border-style: dashed; }
+.dep-app.soon:hover { border-color: #e5e7eb; transform: none; }
+.dep-app .tag-soon { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+#depDlg, #depRun { flex-direction: column; width: min(720px, 94vw); }
+#depDlg .dlg-body, #depRun .dlg-body { gap: 14px; }
+#depRun { width: min(900px, 96vw); }
+#depScript { min-height: 220px; }
+.dep-term { height: 52vh; background: #0b0b0f; border-radius: 12px; padding: 8px; overflow: hidden; }

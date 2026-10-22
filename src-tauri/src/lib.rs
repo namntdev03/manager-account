@@ -1739,7 +1739,7 @@ fn pty_size(cols: u16, rows: u16) -> PtySize {
 #[tauri::command]
 async fn term_open(
     app: tauri::AppHandle,
-    state: tauri::State<'_, Sessions>,
+    _state: tauri::State<'_, Sessions>,
     host_id: String,
     account_id: Option<String>,
     cols: u16,
@@ -1756,24 +1756,30 @@ async fn term_open(
     };
     let (args, envs) = ssh_args(h, acct.as_ref())?;
 
-    let pair = native_pty_system()
-        .openpty(pty_size(cols, rows))
-        .map_err(|e| format!("Không tạo được terminal: {e}"))?;
     let mut cmd = CommandBuilder::new("ssh");
     cmd.args(&args);
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
+    spawn_pty(&app, cmd, cols, rows)
+}
+
+/// Mở một lệnh trong PTY và truyền dữ liệu về giao diện qua sự kiện term-data / term-exit.
+fn spawn_pty(app: &tauri::AppHandle, mut cmd: CommandBuilder, cols: u16, rows: u16) -> Result<String, String> {
     cmd.env("TERM", "xterm-256color");
     #[cfg(unix)]
     {
         let p = std::env::var("PATH").unwrap_or_default();
         cmd.env("PATH", format!("/opt/homebrew/bin:/usr/local/bin:{p}"));
     }
-    for (k, v) in &envs {
-        cmd.env(k, v);
-    }
+    let pair = native_pty_system()
+        .openpty(pty_size(cols, rows))
+        .map_err(|e| format!("Không tạo được terminal: {e}"))?;
+    let prog = cmd.get_argv().first().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     let child = pair
         .slave
         .spawn_command(cmd)
-        .map_err(|e| format!("Không chạy được `ssh`: {e}. Hãy cài OpenSSH rồi thử lại."))?;
+        .map_err(|e| format!("Không chạy được `{}`: {e}", prog))?;
     drop(pair.slave);
     let mut reader = pair
         .master
@@ -1785,7 +1791,7 @@ async fn term_open(
         .map_err(|e| format!("Không ghi được vào terminal: {e}"))?;
 
     let id = new_id();
-    state
+    app.state::<Sessions>()
         .0
         .lock()
         .map_err(|_| "Lỗi nội bộ (khoá phiên)".to_string())?
@@ -1812,6 +1818,58 @@ async fn term_open(
         let _ = app2.emit("term-exit", TermExit { id: id2 });
     });
     Ok(id)
+}
+
+/// Chạy một script cài đặt trong terminal: trên máy này (macOS/Linux) hoặc trên SSH host.
+/// Script được truyền nguyên văn; giao diện luôn hiển thị nó cho người dùng xem và xác nhận trước.
+#[tauri::command]
+async fn deploy_run(
+    app: tauri::AppHandle,
+    host_id: Option<String>,
+    account_id: Option<String>,
+    script: String,
+    cols: u16,
+    rows: u16,
+) -> Result<String, String> {
+    if script.trim().is_empty() || script.len() > 200_000 {
+        return Err("Script không hợp lệ".into());
+    }
+    match host_id.filter(|s| !s.is_empty()) {
+        None => {
+            #[cfg(windows)]
+            {
+                let _ = (&app, &script, cols, rows);
+                return Err("Windows chưa hỗ trợ cài trực tiếp trên máy này. Hãy chọn một SSH host (Linux).".into());
+            }
+            #[cfg(not(windows))]
+            {
+                let mut cmd = CommandBuilder::new("bash");
+                cmd.args(["-c", script.as_str()]);
+                return spawn_pty(&app, cmd, cols, rows);
+            }
+        }
+        Some(hid) => {
+            let hosts = load_hosts(&app)?;
+            let h = hosts.iter().find(|x| x.id == hid).ok_or("Không tìm thấy SSH host này")?;
+            let acct = match account_id.filter(|s| !s.is_empty()) {
+                Some(id) => Some(find_profile(&app, &id)?),
+                None => None,
+            };
+            let (args, envs) = ssh_args(h, acct.as_ref())?;
+            let b64 = B64.encode(script.as_bytes());
+            let remote = format!(
+                "f=$(mktemp) && echo '{b64}' | base64 -d > \"$f\" && bash \"$f\"; rc=$?; rm -f \"$f\"; exit $rc"
+            );
+            let mut cmd = CommandBuilder::new("ssh");
+            cmd.arg("-t");
+            cmd.args(&args);
+            cmd.arg(remote);
+            for (k, v) in &envs {
+                cmd.env(k, v);
+            }
+            spawn_pty(&app, cmd, cols, rows)
+        }
+    }
 }
 
 #[tauri::command]
@@ -3221,7 +3279,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
-            user_home, get_stats, get_security, set_security, reveal_passphrase, backup_export, backup_inspect, backup_import, ssh_keygen, ssh_public_key, open_url, rules_list, rules_save, rules_delete, rules_sync, reveal_secret, reveal_password, list_hosts, save_host, delete_host, sftp_list, sftp_download, sftp_upload, sftp_mkdir, sftp_rename, sftp_remove, term_open, term_write, term_resize, term_close,
+            user_home, get_stats, get_security, set_security, reveal_passphrase, backup_export, backup_inspect, backup_import, ssh_keygen, ssh_public_key, open_url, rules_list, rules_save, rules_delete, rules_sync, reveal_secret, reveal_password, list_hosts, save_host, delete_host, sftp_list, sftp_download, sftp_upload, sftp_mkdir, sftp_rename, sftp_remove, term_open,
+            deploy_run, term_write, term_resize, term_close,
             list_profiles,
             save_profile,
             delete_profile,

@@ -31,6 +31,7 @@
 - **ArgoCD**: lưu địa chỉ và account token (nên tạo token riêng, quyền tối thiểu). Bấm dùng ghi `~/.config/argocd/config`, mỗi tài khoản là một context. Test gọi `/api/v1/session/userinfo`. Nếu ArgoCD không mở ra ngoài, dùng `https://localhost:8080` sau `kubectl port-forward` và bật tuỳ chọn chứng chỉ tự ký.
 - **Docker registry**: Docker Hub, GHCR hoặc registry riêng: lưu địa chỉ, username và access token. Bấm dùng chạy `docker login`. Test gọi `auth.docker.io` (Docker Hub) hoặc `<registry>/v2/`.
 - **Harbor**: lưu địa chỉ, username (nên dùng robot account) và mật khẩu/secret. Bấm dùng chạy `docker login`. Test gọi `/api/v2.0/projects`.
+- **Deployment**: cài Docker, PostgreSQL, Redis, Nginx lên máy này (macOS/Linux) hoặc một SSH host (Debian/Ubuntu, RHEL/Rocky/Alma). Chọn phiên bản, app hiển thị **toàn bộ script** rồi chạy trong terminal của app (qua `ssh -t`, bạn thấy từng dòng và nhập được mật khẩu sudo). Script tự kiểm tra hệ điều hành, ổ đĩa, cổng đang bị chiếm và hỏi lại `[y/N]` trước khi cài. Với server từ xa phải gõ lại tên server để xác nhận. Script thêm repo gói chính thức (PGDG, packages.redis.io, nginx.org, get.docker.com) và cần quyền sudo; việc tải gói do máy đích thực hiện. Kubernetes, Calico, ArgoCD, Harbor sẽ có sau.
 - **Hiệu năng**: RAM, CPU và số phiên SSH mà chính app đang dùng.
 - **Ngôn ngữ**: Tiếng Việt và English (Cài đặt → Ngôn ngữ; mặc định theo ngôn ngữ hệ thống). Thêm ngôn ngữ mới: thêm một bảng trong `src/i18n.js`.
 

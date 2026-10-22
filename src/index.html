@@ -30,6 +30,7 @@
           <div class="sub" id="subNav"></div>
         </div>
         <button class="nav-item" data-page="hosts"><i data-i="server"></i><span>SSH host</span></button>
+        <button class="nav-item" data-page="deploy"><i data-i="rocket"></i><span>Deployment</span></button>
         <button class="nav-item" data-page="backup"><i data-i="archive"></i><span>Kho lưu trữ</span></button>
         <button class="nav-item" data-page="stats"><i data-i="activity"></i><span>Hiệu năng</span></button>
         <button class="nav-item" data-page="settings"><i data-i="sliders"></i><span>Cài đặt</span></button>
@@ -96,6 +97,23 @@
       <div class="tabs" id="termTabs" hidden></div>
       <div id="hostList"><div class="cards" id="hostCards"></div></div>
       <div id="termView" hidden></div>
+    </section>
+
+    <section id="page-deploy" hidden>
+      <div class="glass-card dep-target">
+        <div class="dep-trow">
+          <div>
+            <div class="host-sec">Cài đặt lên</div>
+            <button type="button" class="sel" data-sel="dep_target" data-value="" aria-haspopup="listbox"><span class="sel-v"></span><i data-i="chevron" class="sel-ic"></i></button>
+          </div>
+          <div id="depAccBox">
+            <div class="host-sec">Kết nối bằng</div>
+            <button type="button" class="sel" data-sel="dep_acc" data-value="" aria-haspopup="listbox"><span class="sel-v"></span><i data-i="chevron" class="sel-ic"></i></button>
+          </div>
+        </div>
+        <div class="dep-note" id="depNote"></div>
+      </div>
+      <div class="cards dep-grid" id="depGrid"></div>
     </section>
 
     <section id="page-backup" hidden>
@@ -217,6 +235,7 @@
             <li><b>SSH host.</b> Kết nối server bằng terminal ngay trong app (nhiều tab), mật khẩu và passphrase của key được tự điền. Có thể <b>duyệt, tải lên, tải về, đổi tên và xoá file</b> trên server qua SSH.</li>
             <li><b>Kho lưu trữ.</b> Sao lưu toàn bộ tài khoản, SSH host và quy tắc vào một file mã hoá bằng mật khẩu của bạn, rồi khôi phục khi đổi sang máy khác.</li>
             <li><b>Kubernetes, ArgoCD, Harbor, Docker.</b> Lưu kubeconfig (mã hoá), token ArgoCD, tài khoản Harbor và Docker registry, đổi cluster hoặc đăng nhập bằng một cú bấm, có nhãn production để tránh nhầm.</li>
+            <li><b>Deployment.</b> Cài Docker, PostgreSQL, Redis, Nginx lên máy này hoặc một server qua SSH: chọn phiên bản, xem trước toàn bộ script, rồi chạy trong terminal của app.</li>
             <li><b>Hiệu năng.</b> Xem RAM, CPU và số phiên SSH mà chính app đang dùng.</li>
           </ul>
         </div>
@@ -230,6 +249,7 @@
             <li><b>npm:</b> ghi token và <code>registry=</code> vào <code>~/.npmrc</code> hoặc <code>.npmrc</code> của repo, các dòng khác giữ nguyên.</li>
             <li><b>SSH và quản lý file:</b> app chạy lệnh <code>ssh</code> có sẵn của hệ điều hành. Mật khẩu và passphrase được điền qua cơ chế <code>SSH_ASKPASS</code> (chính app đọc Keychain, không ghi ra file). Phần quản lý file chạy các lệnh <code>ls</code>, <code>cat</code>, <code>tar</code>, <code>mkdir</code>, <code>mv</code>, <code>rm</code> trên server bạn chọn qua kết nối SSH đó.</li>
             <li><b>Kubernetes, ArgoCD, Docker, Harbor:</b> ghi <code>~/.kube/config</code> và <code>~/.config/argocd/config</code> (file cũ của bạn được sao lưu trước), hoặc chạy <code>docker login</code> tới Harbor / Docker registry khi bạn bấm dùng tài khoản.</li>
+            <li><b>Deployment:</b> khi bạn bấm “Bắt đầu cài”, script hiển thị trước đó được chạy trên máy này hoặc trên server bạn chọn (có thể thêm repo gói và cài phần mềm, cần quyền sudo). Server production phải gõ lại tên để xác nhận.</li>
           </ul>
         </div>
 
@@ -238,7 +258,7 @@
           <ul class="feat">
             <li><b>Dữ liệu chỉ nằm trên máy bạn.</b> Không có server của app, không tài khoản người dùng, không thống kê, không quảng cáo, không bán hay chia sẻ dữ liệu cho bên thứ ba.</li>
             <li><b>Nơi lưu:</b> thông tin tài khoản, SSH host và quy tắc (tên, email, host, đường dẫn key…) nằm trong thư mục dữ liệu của app; <b>token, mật khẩu SSH và passphrase nằm trong kho bảo mật của hệ điều hành</b> (Keychain / Credential Manager / Secret Service), không ghi vào file thường; private key dán hoặc tạo trong app được lưu thành file riêng quyền 600; kubeconfig được mã hoá thành file riêng, khoá giải mã nằm trong kho bảo mật.</li>
-            <li><b>Khi nào app dùng mạng:</b> (1) kiểm tra bản cập nhật, chỉ một yêu cầu đọc tới GitHub Releases của dự án, tắt được ở <i>Cài đặt</i>; (2) khi bạn bấm <i>Cập nhật ngay</i>, tải file cập nhật từ GitHub Releases của dự án; (3) khi bạn bấm <i>Test kết nối</i>, chỉ tới đúng nền tảng hoặc máy chủ của tài khoản đó (GitHub, GitLab, npm registry, Kubernetes, ArgoCD, Harbor, Docker registry); (4) khi bạn mở terminal hoặc quản lý file của một SSH host, kết nối SSH tới chính máy chủ đó; (5) khi bạn bấm <i>Mở trang thêm key</i>, app chỉ mở trình duyệt tới trang SSH key của GitHub/GitLab, không gửi gì kèm theo.</li>
+            <li><b>Khi nào app dùng mạng:</b> (1) kiểm tra bản cập nhật, chỉ một yêu cầu đọc tới GitHub Releases của dự án, tắt được ở <i>Cài đặt</i>; (2) khi bạn bấm <i>Cập nhật ngay</i>, tải file cập nhật từ GitHub Releases của dự án; (3) khi bạn bấm <i>Test kết nối</i>, chỉ tới đúng nền tảng hoặc máy chủ của tài khoản đó (GitHub, GitLab, npm registry, Kubernetes, ArgoCD, Harbor, Docker registry); (4) khi bạn mở terminal, quản lý file hoặc chạy Deployment trên một SSH host, kết nối SSH tới chính máy chủ đó (việc tải gói do máy đích thực hiện từ nguồn chính thức như get.docker.com, apt.postgresql.org, packages.redis.io, nginx.org, Homebrew, không đi qua app); (5) khi bạn bấm <i>Mở trang thêm key</i>, app chỉ mở trình duyệt tới trang SSH key của GitHub/GitLab, không gửi gì kèm theo.</li>
             <li><b>Không bao giờ gửi</b> tên, email, token, mật khẩu, SSH key, danh sách tài khoản, danh sách SSH host hay đường dẫn repo của bạn tới bất kỳ đâu.</li>
             <li><b>Kho lưu trữ:</b> file sao lưu chứa mọi bí mật của bạn, được mã hoá bằng mật khẩu bạn đặt (Argon2id và ChaCha20-Poly1305). App không giữ mật khẩu đó và không tự tải file lên đâu cả. Mất mật khẩu thì không thể mở lại file. Hãy cất file ở nơi an toàn.</li>
             <li><b>Xác thực khi xem bí mật:</b> hiện token, mật khẩu, key, passphrase hoặc tạo file sao lưu sẽ hỏi Touch ID / mật khẩu máy (macOS), Windows Hello hoặc PIN (Windows), mật khẩu hệ thống (Linux). Tính năng bật mặc định và tắt được ở <i>Cài đặt</i>. Nó chặn người khác dùng ké lúc app đang mở, nhưng không ngăn được phần mềm khác chạy dưới tài khoản của bạn đọc trực tiếp kho bảo mật của hệ điều hành.</li>
@@ -417,6 +437,41 @@
     </form>
   </dialog>
 
+  <!-- DEPLOYMENT: CHỌN PHIÊN BẢN, XEM SCRIPT, XÁC NHẬN -->
+  <dialog id="depDlg">
+    <div class="dlg-head">
+      <h3 id="depTitle">Cài đặt</h3>
+      <p id="depSub"></p>
+    </div>
+    <div class="dlg-body">
+      <label>Phiên bản
+        <div class="seg" id="depVer"></div>
+      </label>
+      <label>Script sẽ chạy (hãy đọc kỹ trước khi cài)
+        <textarea id="depScript" rows="12" readonly spellcheck="false"></textarea>
+      </label>
+      <label id="depConfirmLbl" hidden><span id="depConfirmTxt"></span>
+        <input id="depConfirm" autocomplete="off" spellcheck="false" />
+      </label>
+      <p class="error" id="depErr" hidden></p>
+    </div>
+    <div class="actions">
+      <button type="button" id="depCancel" class="btn ghost">Huỷ</button>
+      <button type="button" id="depGo" class="btn dark">Bắt đầu cài</button>
+    </div>
+  </dialog>
+
+  <dialog id="depRun">
+    <div class="dlg-head">
+      <h3 id="depRunTitle">Đang cài đặt</h3>
+      <p id="depRunSub"></p>
+    </div>
+    <div class="dlg-body"><div id="depTerm" class="dep-term"></div></div>
+    <div class="actions">
+      <button type="button" id="depRunClose" class="btn dark">Đóng</button>
+    </div>
+  </dialog>
+
   <!-- XỬ LÝ MỤC TRÙNG KHI KHÔI PHỤC -->
   <dialog id="cfDlg">
     <div class="dlg-head">
@@ -523,6 +578,7 @@
   <script src="vendor/xterm/addon-fit.js"></script>
   <script src="license.js"></script>
   <script src="i18n.js"></script>
+  <script src="deploy.js"></script>
   <script src="main.js"></script>
 </body>
 </html>
