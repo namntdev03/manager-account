@@ -247,6 +247,8 @@
     const c = S.current;
     let msg;
     if (S.err) msg = S.err;
+    else if (S.scope === "repo" && c && c.inherited)
+      msg = t("Repo này chưa có tài khoản riêng, đang dùng cấu hình toàn máy: {n} <{e}>. Bấm \"Dùng tài khoản này\" để commit bằng đúng tài khoản trong repo.", { n: c.name || t("(chưa đặt tên)"), e: c.email || t("chưa đặt email") });
     else if (platName) msg = t("Chưa có tài khoản {p} nào đang hoạt động. Chọn một tài khoản bên dưới để dùng.", { p: platName });
     else if (c && (c.name || c.email))
       msg = t("Git đang dùng {n} <{e}> — không khớp tài khoản nào đã lưu.", { n: c.name || t("(chưa đặt tên)"), e: c.email || t("chưa đặt email") });

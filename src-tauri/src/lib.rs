@@ -96,6 +96,8 @@ struct Current {
     remotes: Vec<String>,
     /// các tài khoản đang hoạt động (mỗi nền tảng có thể có một)
     active_ids: Vec<String>,
+    /// chế độ repo nhưng repo chưa có user.name/email riêng (đang kế thừa cấu hình toàn máy)
+    inherited: bool,
 }
 
 #[derive(Serialize)]
@@ -3228,6 +3230,17 @@ async fn get_current(
     let email = cfg_get(repo, global, &["--get", "user.email"]);
     let ssh_cmd = cfg_get(repo, global, &["--get", "core.sshCommand"]);
     let creds_raw = cfg_get(repo, global, &["--get-regexp", r"^credential\..*\.username$"]);
+    // "Đang dùng" chỉ tính theo cấu hình của chính phạm vi đang xem: ở chế độ repo, giá trị kế thừa
+    // từ toàn máy không được coi là tài khoản của repo.
+    let (act_creds, act_ssh, inherited) = if repo.is_some() {
+        (
+            cfg_get(repo, false, &["--local", "--get-regexp", r"^credential\..*\.username$"]),
+            cfg_get(repo, false, &["--local", "--get", "core.sshCommand"]),
+            cfg_get(repo, false, &["--local", "--get", "user.email"]).is_empty(),
+        )
+    } else {
+        (creds_raw.clone(), ssh_cmd.clone(), false)
+    };
     let credential_users: Vec<String> = creds_raw
         .lines()
         .filter_map(|l| l.split_once(' ').map(|(_, v)| v.trim().to_string()))
@@ -3247,7 +3260,7 @@ async fn get_current(
 
     let profiles = load_profiles(&app)?;
     // credential.https://<host>.username -> (host, username)
-    let cred_pairs: Vec<(String, String)> = creds_raw
+    let cred_pairs: Vec<(String, String)> = act_creds
         .lines()
         .filter_map(|l| {
             let (k, v) = l.split_once(' ')?;
@@ -3280,7 +3293,7 @@ async fn get_current(
                 };
             }
             if p.auth == "ssh" {
-                !ssh_cmd.is_empty() && ssh_cmd.contains(&expand(&p.ssh_key_path).replace('\\', "/"))
+                !act_ssh.is_empty() && act_ssh.contains(&expand(&p.ssh_key_path).replace('\\', "/"))
             } else {
                 cred_pairs.iter().any(|(h, u)| *h == p.host && *u == p.login)
             }
@@ -3296,6 +3309,7 @@ async fn get_current(
         credential_users,
         remotes,
         active_ids,
+        inherited,
     })
 }
 

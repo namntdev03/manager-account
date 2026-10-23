@@ -470,6 +470,7 @@
     "Gỡ distro WSL của Docker": "Removing Docker's WSL distros",
     "Dừng dịch vụ PostgreSQL": "Stopping the PostgreSQL service", "Gỡ PostgreSQL": "Removing PostgreSQL", "Xoá dữ liệu còn sót": "Deleting leftover data", "Xoá thư mục nginx": "Deleting the nginx folder",
     "Cách cài": "Install method",
+    "Repo này chưa có tài khoản riêng, đang dùng cấu hình toàn máy: {n} <{e}>. Bấm \"Dùng tài khoản này\" để commit bằng đúng tài khoản trong repo.": "This repo has no account of its own and uses the machine-wide config: {n} <{e}>. Click \"Use this account\" to commit with the right account in this repo.",
     "Homebrew (bản mới nhất, nhanh)": "Homebrew (latest, fast)",
     "Biên dịch từ mã nguồn (chọn được phiên bản)": "Build from source (pick a version)",
     "Homebrew chỉ cài bản mới nhất nên không có danh sách phiên bản. Muốn chọn phiên bản, hãy chọn “Biên dịch từ mã nguồn”.": "Homebrew only installs the latest release, so there is no version list. To pick a version, choose “Build from source”.",
