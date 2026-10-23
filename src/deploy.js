@@ -732,9 +732,267 @@ echo "##P done"
 `;
 
 
+  // ───────── Windows (PowerShell, chạy qua powershell.exe -EncodedCommand) ─────────
+  const PRE_WIN = String.raw`$ErrorActionPreference = 'Continue'
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+Write-Host "=== Kiểm tra trước khi cài ==="
+Write-Host ("Máy: " + $env:COMPUTERNAME + " | User: " + $env:USERNAME + " | Hệ điều hành: " + [System.Environment]::OSVersion.VersionString)
+$script:STEP = 0
+$script:TOTAL = 1
+function Begin($n) { $script:TOTAL = $n; $script:STEP = 0 }
+function Step($t) { $script:STEP++; Write-Host ("##P " + $script:STEP + " " + $script:TOTAL + " " + $t) }
+function Confirm-Go {
+  $a = Read-Host "Tiếp tục cài đặt? [y/N]"
+  if ($a -ne 'y' -and $a -ne 'Y') { Write-Host "Đã huỷ, chưa thay đổi gì."; exit 1 }
+}
+function Need-Winget {
+  if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+    Write-Host "Cần winget (App Installer của Microsoft): https://aka.ms/getwinget"
+    exit 1
+  }
+}
+function Wg {
+  & winget @args
+  $rc = $LASTEXITCODE
+  if ($rc -ne 0 -and $rc -ne -1978335189 -and $rc -ne -1978335135) { Write-Host ("winget báo lỗi, mã " + $rc); exit 1 }
+}
+function Rmp($p) {
+  if (Test-Path $p) {
+    Write-Host ("  xoá " + $p)
+    try { Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction Stop } catch { Write-Host ("  không xoá được " + $p + ": " + $_.Exception.Message) }
+  }
+}
+function Show-Path($p) {
+  if (Test-Path $p) {
+    $m = Get-ChildItem -LiteralPath $p -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum
+    Write-Host ("  - " + $p + " (" + [math]::Round($m.Sum / 1MB, 1) + " MB)")
+  }
+}
+function Kube-Pick {
+  if (-not (Get-Command kubectl -ErrorAction SilentlyContinue)) {
+    Write-Host "Chưa có kubectl trên máy này. Cài bằng: winget install Kubernetes.kubectl"
+    exit 1
+  }
+  kubectl --request-timeout=8s get ns *> $null
+  if ($LASTEXITCODE -ne 0) { Write-Host "Không kết nối được tới cluster Kubernetes nào (kubectl get ns thất bại)."; exit 1 }
+  Write-Host ("Cluster đích: " + (kubectl config current-context))
+  Write-Host ("API server: " + (kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}'))
+}
+Write-Host ""
+`;
+
+  const DOCKER_WIN = String.raw`Need-Winget
+if (Get-Command docker -ErrorAction SilentlyContinue) { Write-Host ("Docker đã được cài: " + (docker --version)) }
+Write-Host "Windows: cài Docker Desktop bằng winget (không chọn được phiên bản). Cần bật WSL2 hoặc Hyper-V."
+Confirm-Go
+Wg install --id Docker.DockerDesktop -e --accept-package-agreements --accept-source-agreements
+Write-Host "Hoàn tất cài Docker Desktop. Hãy mở Docker Desktop một lần để khởi động engine; có thể cần khởi động lại máy."
+`;
+
+  const DOCKER_WIN_UN = String.raw`Need-Winget
+Write-Host "=== Gỡ Docker và xoá sạch dữ liệu ==="
+if (Get-Command docker -ErrorAction SilentlyContinue) {
+  $c = (docker ps -aq 2>$null | Measure-Object).Count
+  $i = (docker images -q 2>$null | Measure-Object).Count
+  $v = (docker volume ls -q 2>$null | Measure-Object).Count
+  Write-Host ("Hiện có: " + $c + " container, " + $i + " image, " + $v + " volume (TẤT CẢ sẽ bị xoá).")
+}
+Write-Host "Sẽ xoá:"
+Write-Host "  - Docker Desktop (winget Docker.DockerDesktop) và các distro WSL docker-desktop"
+Show-Path "$env:USERPROFILE\.docker"
+Show-Path "$env:APPDATA\Docker"
+Show-Path "$env:APPDATA\Docker Desktop"
+Show-Path "$env:LOCALAPPDATA\Docker"
+Show-Path "$env:ProgramData\DockerDesktop"
+Begin 4
+Step "Dừng Docker Desktop"
+Get-Process -Name 'Docker Desktop', 'com.docker.backend', 'com.docker.proxy' -ErrorAction SilentlyContinue | Stop-Process -Force
+Step "Gỡ ứng dụng Docker"
+Wg uninstall --id Docker.DockerDesktop -e --silent
+Step "Gỡ distro WSL của Docker"
+if (Get-Command wsl -ErrorAction SilentlyContinue) {
+  wsl --unregister docker-desktop 2>&1 | Out-Null
+  wsl --unregister docker-desktop-data 2>&1 | Out-Null
+}
+Step "Xoá dữ liệu và cấu hình"
+Rmp "$env:USERPROFILE\.docker"
+Rmp "$env:APPDATA\Docker"
+Rmp "$env:APPDATA\Docker Desktop"
+Rmp "$env:LOCALAPPDATA\Docker"
+Rmp "$env:ProgramData\DockerDesktop"
+Write-Host "Đã gỡ Docker và xoá dữ liệu."
+Write-Host "##P done"
+`;
+
+  const POSTGRES_WIN = String.raw`$PGV = "@VERSION@"
+if ($PGV -notmatch '^[0-9]{2}$') { Write-Host "Phiên bản không hợp lệ: $PGV"; exit 1 }
+Need-Winget
+if (Get-NetTCPConnection -LocalPort 5432 -State Listen -ErrorAction SilentlyContinue) { Write-Host "CẢNH BÁO: cổng 5432 đang được một tiến trình khác sử dụng." }
+Write-Host ("Sẽ cài PostgreSQL " + $PGV + " bằng winget (PostgreSQL.PostgreSQL." + $PGV + "), user postgres, cổng 5432, mật khẩu tự sinh.")
+Confirm-Go
+$pw = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 20 | ForEach-Object { [char]$_ })
+Wg install --id ("PostgreSQL.PostgreSQL." + $PGV) -e --accept-package-agreements --accept-source-agreements --override ("--mode unattended --unattendedmodeui none --superpassword " + $pw)
+$conf = "C:\Program Files\PostgreSQL\$PGV\data\postgresql.conf"
+if (Test-Path $conf) {
+  try {
+    (Get-Content $conf) -replace "^\s*#?\s*listen_addresses\s*=.*", "listen_addresses = 'localhost'" | Set-Content $conf
+    Restart-Service ("postgresql-x64-" + $PGV)
+    Write-Host "Đã đặt listen_addresses = localhost."
+  } catch {
+    Write-Host "Chưa đặt được listen_addresses = 'localhost' (cần quyền quản trị). Hãy tự kiểm tra postgresql.conf để không mở cổng 5432 ra mạng."
+  }
+}
+Write-Host ("Hoàn tất cài PostgreSQL " + $PGV + ". User: postgres   Mật khẩu: " + $pw)
+Write-Host "HÃY LƯU mật khẩu này ngay. Không mở cổng 5432 ra internet nếu không cần."
+`;
+
+  const POSTGRES_WIN_UN = String.raw`Need-Winget
+Write-Host "=== Gỡ PostgreSQL và xoá sạch dữ liệu ==="
+Write-Host "Sẽ xoá TOÀN BỘ PostgreSQL trên máy này (mọi phiên bản) cùng MỌI cơ sở dữ liệu. Hãy chắc chắn đã sao lưu (pg_dump)."
+$found = @()
+foreach ($m in 13..19) {
+  winget list --id ("PostgreSQL.PostgreSQL." + $m) -e --accept-source-agreements *> $null
+  if ($LASTEXITCODE -eq 0) { $found += $m }
+}
+if ($found.Count -eq 0) { Write-Host "Không thấy PostgreSQL nào cài bằng winget." } else { Write-Host ("Phiên bản đang cài: " + ($found -join ", ")) }
+foreach ($m in $found) { Show-Path ("C:\Program Files\PostgreSQL\" + $m) }
+Begin 3
+Step "Dừng dịch vụ PostgreSQL"
+foreach ($m in $found) { Stop-Service -Name ("postgresql-x64-" + $m) -Force -ErrorAction SilentlyContinue }
+Step "Gỡ PostgreSQL"
+foreach ($m in $found) { Wg uninstall --id ("PostgreSQL.PostgreSQL." + $m) -e --silent }
+Step "Xoá dữ liệu còn sót"
+foreach ($m in $found) { Rmp ("C:\Program Files\PostgreSQL\" + $m) }
+Write-Host "Đã gỡ PostgreSQL và xoá dữ liệu."
+Write-Host "##P done"
+`;
+
+  const NGINX_WIN = String.raw`$NV = "@VERSION@"
+if ($NV -ne 'stable' -and $NV -ne 'mainline') { Write-Host "Phiên bản không hợp lệ: $NV"; exit 1 }
+if (Get-NetTCPConnection -LocalPort 80 -State Listen -ErrorAction SilentlyContinue) { Write-Host "CẢNH BÁO: cổng 80 đang được một tiến trình khác sử dụng." }
+$page = (Invoke-WebRequest -UseBasicParsing "https://nginx.org/en/download.html").Content
+$vers = [regex]::Matches($page, 'nginx-(\d+\.\d+\.\d+)\.zip') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique | Sort-Object { [version]$_ } -Descending
+$ver = $null
+foreach ($v in $vers) {
+  $minor = [int]($v.Split('.')[1])
+  if (($NV -eq 'mainline' -and $minor % 2 -eq 1) -or ($NV -eq 'stable' -and $minor % 2 -eq 0)) { $ver = $v; break }
+}
+if (-not $ver) { Write-Host "Không đọc được phiên bản nginx từ nginx.org."; exit 1 }
+$dir = Join-Path $env:LOCALAPPDATA ("Programs\nginx-" + $ver)
+if (Test-Path $dir) { Write-Host ("Đã có " + $dir + ". Hãy gỡ bản cũ trước."); exit 1 }
+Write-Host ("Sẽ tải nginx " + $ver + " (" + $NV + ") từ nginx.org vào " + $dir + " và chạy dưới tài khoản của bạn, chỉ nghe 127.0.0.1:80.")
+Confirm-Go
+$tmp = Join-Path $env:TEMP ("nginx-" + $ver + ".zip")
+Invoke-WebRequest -UseBasicParsing ("https://nginx.org/download/nginx-" + $ver + ".zip") -OutFile $tmp
+$ex = Join-Path $env:TEMP ("nginx-x-" + $ver)
+if (Test-Path $ex) { Remove-Item -Recurse -Force $ex }
+Expand-Archive -Path $tmp -DestinationPath $ex
+New-Item -ItemType Directory -Force -Path (Split-Path $dir) | Out-Null
+Move-Item -Path (Join-Path $ex ("nginx-" + $ver)) -Destination $dir
+Remove-Item -Force $tmp
+Remove-Item -Recurse -Force $ex
+$cf = Join-Path $dir "conf\nginx.conf"
+(Get-Content $cf) -replace "listen\s+80;", "listen       127.0.0.1:80;" | Set-Content $cf
+Start-Process -FilePath (Join-Path $dir "nginx.exe") -WorkingDirectory $dir -WindowStyle Hidden
+Write-Host ("Hoàn tất cài nginx " + $ver + " tại " + $dir)
+Write-Host ("Dừng: taskkill /f /im nginx.exe    Chạy lại: " + (Join-Path $dir "nginx.exe"))
+`;
+
+  const NGINX_WIN_UN = String.raw`Write-Host "=== Gỡ Nginx và xoá sạch cấu hình ==="
+Write-Host "Thư mục web của bạn nằm ngoài thư mục nginx nên KHÔNG bị xoá."
+$base = Join-Path $env:LOCALAPPDATA "Programs"
+$dirs = @(Get-ChildItem -Path $base -Directory -Filter "nginx-*" -ErrorAction SilentlyContinue)
+Write-Host "Sẽ xoá:"
+foreach ($d in $dirs) { Show-Path $d.FullName }
+Begin 2
+Step "Dừng Nginx"
+Get-Process -Name nginx -ErrorAction SilentlyContinue | Stop-Process -Force
+Step "Xoá thư mục nginx"
+foreach ($d in $dirs) { Rmp $d.FullName }
+Write-Host "Đã gỡ Nginx và xoá cấu hình."
+Write-Host "##P done"
+`;
+
+  const CALICO_WIN = String.raw`$CV = "@VERSION@"
+if ($CV -notmatch '^\d+\.\d+\.\d+$') { Write-Host "Phiên bản không hợp lệ: $CV"; exit 1 }
+Kube-Pick
+kubectl -n kube-system get ds calico-node *> $null
+if ($LASTEXITCODE -eq 0) { Write-Host "Cluster này đã có Calico (calico-node)." }
+$url = "https://raw.githubusercontent.com/projectcalico/calico/v$CV/manifests/calico.yaml"
+Write-Host ("Sẽ chạy: kubectl apply -f " + $url)
+Write-Host "Calico là plugin mạng (CNI) của cả cluster; hãy chắc chắn cluster đích ở trên là đúng."
+Confirm-Go
+kubectl apply -f $url
+Write-Host "Chờ calico-node sẵn sàng (tối đa 5 phút)..."
+kubectl -n kube-system rollout status ds/calico-node --timeout=300s
+kubectl get nodes
+Write-Host ("Hoàn tất cài Calico " + $CV + ".")
+`;
+
+  const CALICO_WIN_UN = String.raw`Write-Host "=== Gỡ Calico khỏi cluster ==="
+Kube-Pick
+$img = kubectl -n kube-system get ds calico-node -o jsonpath='{.spec.template.spec.containers[0].image}' 2>$null
+$CV = ""
+if ($img -match ':v([0-9][0-9.]*)$') { $CV = $Matches[1] }
+if ($CV -eq "") { Write-Host "Không thấy Calico (calico-node) trong cluster này." } else { Write-Host ("Calico đang chạy: v" + $CV) }
+Write-Host "Pod sẽ MẤT mạng cho tới khi có CNI khác."
+Begin 1
+Step "Xoá Calico khỏi cluster"
+if ($CV -ne "") { kubectl delete -f ("https://raw.githubusercontent.com/projectcalico/calico/v" + $CV + "/manifests/calico.yaml") --ignore-not-found --timeout=180s }
+Write-Host "Đã gỡ Calico."
+Write-Host "##P done"
+`;
+
+  const ARGOCD_WIN = String.raw`$AV = "@VERSION@"
+if ($AV -notmatch '^\d+\.\d+\.\d+$') { Write-Host "Phiên bản không hợp lệ: $AV"; exit 1 }
+Kube-Pick
+kubectl -n argocd get deploy argocd-server *> $null
+if ($LASTEXITCODE -eq 0) { Write-Host "Cluster này đã có ArgoCD (namespace argocd)." }
+$url = "https://raw.githubusercontent.com/argoproj/argo-cd/v$AV/manifests/install.yaml"
+Write-Host ("Sẽ tạo namespace argocd và chạy: kubectl apply -n argocd --server-side -f " + $url)
+Write-Host "Không mở cổng ra ngoài: giữ ClusterIP, truy cập bằng port-forward."
+Confirm-Go
+kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -n argocd --server-side --force-conflicts -f $url
+Write-Host "Chờ argocd-server sẵn sàng (tối đa 5 phút)..."
+kubectl -n argocd rollout status deployment/argocd-server --timeout=300s
+Write-Host ("Hoàn tất cài ArgoCD " + $AV + ".")
+Write-Host "Truy cập an toàn: kubectl -n argocd port-forward svc/argocd-server 8080:443  rồi mở https://localhost:8080"
+Write-Host "Mật khẩu admin ban đầu (PowerShell): [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}')))"
+Write-Host "Sau khi đăng nhập hãy đổi mật khẩu và xoá secret argocd-initial-admin-secret."
+`;
+
+  const ARGOCD_WIN_UN = String.raw`Write-Host "=== Gỡ ArgoCD khỏi cluster ==="
+Kube-Pick
+$img = kubectl -n argocd get deploy argocd-server -o jsonpath='{.spec.template.spec.containers[0].image}' 2>$null
+$AV = ""
+if ($img -match ':v([0-9][0-9.]*)$') { $AV = $Matches[1] }
+if ($AV -eq "") { Write-Host "Không thấy argocd-server trong namespace argocd." } else { Write-Host ("ArgoCD đang chạy: v" + $AV) }
+$apps = @(kubectl get applications.argoproj.io -A --no-headers -o custom-columns=NS:.metadata.namespace,N:.metadata.name 2>$null)
+Write-Host ("Các Application: " + $apps.Count)
+Write-Host "Workload ArgoCD đã triển khai sẽ được GIỮ LẠI (script gỡ finalizer của Application trước khi xoá)."
+Begin 3
+Step "Giữ lại workload: gỡ finalizer của Application"
+$pf = [System.IO.Path]::GetTempFileName()
+Set-Content -Path $pf -Value '{"metadata":{"finalizers":null}}' -Encoding ascii
+foreach ($l in $apps) {
+  $p = ("" + $l).Trim() -split '\s+'
+  if ($p.Count -ge 2) { kubectl -n $p[0] patch applications.argoproj.io $p[1] --type merge --patch-file $pf }
+}
+Remove-Item -Force $pf
+Step "Xoá ArgoCD"
+if ($AV -ne "") { kubectl delete -n argocd -f ("https://raw.githubusercontent.com/argoproj/argo-cd/v" + $AV + "/manifests/install.yaml") --ignore-not-found --timeout=180s }
+Step "Xoá namespace và CRD"
+kubectl delete crd applications.argoproj.io applicationsets.argoproj.io appprojects.argoproj.io --ignore-not-found --timeout=120s
+kubectl delete namespace argocd --ignore-not-found --timeout=180s
+Write-Host "Đã gỡ ArgoCD."
+Write-Host "##P done"
+`;
+
   const APPS = [
     {
-      id: "docker", name: "Docker", logo: "docker", os: OS,
+      id: "docker", color: "#2496ED", sup: "Linux · macOS · Windows", only: "", name: "Docker", logo: "docker", os: OS,
       desc: "Docker Engine + Compose plugin (script chính thức get.docker.com)",
       versions: [
         { v: "", label: "Mới nhất (stable)" },
@@ -742,46 +1000,46 @@ echo "##P done"
         { v: "28", label: "28.x" },
         { v: "27", label: "27.x" },
       ],
-      script: DOCKER, uninstall: DOCKER_UN,
+      script: DOCKER, uninstall: DOCKER_UN, win: { script: DOCKER_WIN, uninstall: DOCKER_WIN_UN },
     },
     {
-      id: "postgres", name: "PostgreSQL", logo: "postgres", os: OS,
+      id: "postgres", color: "#4169E1", sup: "Linux · macOS · Windows", only: "", name: "PostgreSQL", logo: "postgres", os: OS,
       desc: "Cơ sở dữ liệu PostgreSQL từ repo chính thức PGDG",
       versions: [{ v: "18", label: "18" }, { v: "17", label: "17" }, { v: "16", label: "16" }, { v: "15", label: "15" }, { v: "14", label: "14" }],
-      script: POSTGRES, uninstall: POSTGRES_UN,
+      script: POSTGRES, uninstall: POSTGRES_UN, win: { script: POSTGRES_WIN, uninstall: POSTGRES_WIN_UN },
     },
     {
-      id: "redis", name: "Redis", logo: "redis", os: OS,
+      id: "redis", color: "#FF4438", sup: "Linux · macOS", only: "", name: "Redis", logo: "redis", os: OS,
       desc: "Redis từ repo chính thức packages.redis.io (dùng cho cache, queue)",
       versions: [{ v: "", label: "Mới nhất" }, { v: "8.0", label: "8.0.x" }, { v: "7.4", label: "7.4.x" }, { v: "7.2", label: "7.2.x" }],
       script: REDIS, uninstall: REDIS_UN,
     },
     {
-      id: "nginx", name: "Nginx", logo: "nginx", os: OS,
+      id: "nginx", color: "#009639", sup: "Linux · macOS · Windows", only: "", name: "Nginx", logo: "nginx", os: OS,
       desc: "Web server / reverse proxy từ repo nginx.org",
       versions: [{ v: "stable", label: "stable" }, { v: "mainline", label: "mainline" }],
-      script: NGINX, uninstall: NGINX_UN,
+      script: NGINX, uninstall: NGINX_UN, win: { script: NGINX_WIN, uninstall: NGINX_WIN_UN },
     },
     {
-      id: "k8s", name: "Kubernetes", logo: "k8s", os: "Debian/Ubuntu, RHEL/Rocky/Alma (Linux)",
+      id: "k8s", color: "#326CE5", sup: "Chỉ Linux", only: "linux", name: "Kubernetes", logo: "k8s", os: "Debian/Ubuntu, RHEL/Rocky/Alma (Linux)",
       desc: "Cluster 1 node bằng kubeadm + containerd (repo pkgs.k8s.io)",
       versions: [{ v: "1.37", label: "1.37" }, { v: "1.36", label: "1.36" }, { v: "1.35", label: "1.35" }, { v: "1.34", label: "1.34" }],
       script: K8S, uninstall: K8S_UN,
     },
     {
-      id: "calico", name: "Calico", logo: "calico", os: "Cluster Kubernetes",
+      id: "calico", color: "#F58220", sup: "Mọi OS có kubectl", only: "", name: "Calico", logo: "calico", os: "Cluster Kubernetes",
       desc: "Plugin mạng (CNI) cho cluster, cài bằng manifest chính thức",
       versions: [{ v: "3.33.0", label: "3.33.0" }, { v: "3.32.2", label: "3.32.2" }, { v: "3.31.7", label: "3.31.7" }, { v: "3.30.7", label: "3.30.7" }],
-      script: CALICO, uninstall: CALICO_UN,
+      script: CALICO, uninstall: CALICO_UN, win: { script: CALICO_WIN, uninstall: CALICO_WIN_UN },
     },
     {
-      id: "argocd", name: "ArgoCD", logo: "argocd", os: "Cluster Kubernetes",
+      id: "argocd", color: "#EF7B4D", sup: "Mọi OS có kubectl", only: "", name: "ArgoCD", logo: "argocd", os: "Cluster Kubernetes",
       desc: "GitOps cho Kubernetes, giữ ClusterIP (truy cập bằng port-forward)",
       versions: [{ v: "3.5.6", label: "3.5.6" }, { v: "3.4.12", label: "3.4.12" }, { v: "3.3.17", label: "3.3.17" }],
-      script: ARGOCD, uninstall: ARGOCD_UN,
+      script: ARGOCD, uninstall: ARGOCD_UN, win: { script: ARGOCD_WIN, uninstall: ARGOCD_WIN_UN },
     },
     {
-      id: "harbor", name: "Harbor", logo: "harbor", os: "Linux có Docker",
+      id: "harbor", color: "#60B932", sup: "Chỉ Linux", only: "linux", name: "Harbor", logo: "harbor", os: "Linux có Docker",
       desc: "Registry cho image container (docker compose, mật khẩu admin tự sinh)",
       versions: [{ v: "2.15.4", label: "2.15.4" }, { v: "2.14.5", label: "2.14.5" }, { v: "2.13.6", label: "2.13.6" }],
       params: [
@@ -797,9 +1055,16 @@ echo "##P done"
   window.DEPLOY = {
     APPS,
     SOON,
-    script(appId, version, method, mode, params) {
+    script(appId, version, method, mode, params, os) {
       const a = APPS.find((x) => x.id === appId);
       if (!a) return "";
+      if (os === "win") {
+        if (!a.win) return 'Write-Host "Ứng dụng này chưa hỗ trợ Windows."; exit 1';
+        if (mode === "uninstall") return PRE_WIN + a.win.uninstall;
+        let w = a.win.script.split("@VERSION@").join(version || "");
+        (a.params || []).forEach((q) => { w = w.split("@" + q.id + "@").join((params && params[q.id]) || q.def || ""); });
+        return PRE_WIN + w;
+      }
       if (mode === "uninstall") return PRE + a.uninstall;
       let body = a.script.split("@METHOD@").join(method || "").split("@VERSION@").join(version || "");
       (a.params || []).forEach((q) => {

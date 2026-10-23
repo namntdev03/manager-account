@@ -916,6 +916,8 @@
   // ───────── Deployment: cài ứng dụng lên máy này hoặc một SSH host ─────────
   const dep = { app: null, ver: "", method: "brew", mode: "install", params: {}, term: null, fit: null, id: null, ended: false };
   const depTarget = () => $('[data-sel="dep_target"]').dataset.value || "";
+  const depPm = () => depSt.pm || (!depTarget() && /Windows/i.test(navigator.userAgent) ? "win" : "");
+  const depOs = () => (depPm() === "win" ? "win" : "");
   const depAcc = () => $('[data-sel="dep_acc"]').dataset.value || "";
   const depHost = () => S.hosts.find((h) => h.id === depTarget());
   // trạng thái cài đặt trên máy đích: { key, loading, err, ver: { docker: "29.7.2" | null, ... } }
@@ -1035,6 +1037,15 @@
   // tên hiển thị của cách đã cài (do bước kiểm tra phát hiện)
   const VIA_NAME = { brew: "Homebrew", macports: "MacPorts", source: "mã nguồn", "docker-desktop": "Docker Desktop", "postgres-app": "Postgres.app", apt: "apt", rpm: "dnf/yum", other: "không rõ" };
   const depViaName = (x) => t(VIA_NAME[x] || x);
+  // Máy đích có cài được ứng dụng này không? (chưa biết hệ điều hành thì coi là được)
+  function depSupport(a) {
+    const pm = depPm();
+    if (!pm || (depSt.loading && !depSt.pm)) return { ok: true };
+    if (a.only === "linux" && pm !== "apt" && pm !== "dnf" && pm !== "yum") return { ok: false, why: "Chỉ cài được trên Linux, máy đích không phải Linux." };
+    if (pm === "win" && a.id === "redis") return { ok: false, why: "Redis không có bản Windows chính thức, hãy dùng server Linux hoặc WSL." };
+    if (pm === "mac" && ["docker", "postgres", "nginx"].includes(a.id)) return { ok: false, why: "Máy macOS này chưa có Homebrew." };
+    return { ok: true };
+  }
   function depBadge(id) {
     if (depSt.loading) return `<span class="dep-st">${t("Đang kiểm tra…")}</span>`;
     if (depSt.err) return `<span class="dep-st">${t("Chưa kiểm tra được")}</span>`;
@@ -1044,10 +1055,13 @@
       : `<span class="dep-st">${t("Chưa cài")}</span>`;
   }
   function renderDepGrid() {
-    const apps = DEPLOY.APPS.map(
-      (a) => `<button type="button" class="dep-app" data-app="${esc(a.id)}">
-        <span class="dep-ic">${platIcon({ id: a.logo })}</span><b>${esc(a.name)}</b>${depBadge(a.id)}<span class="d">${esc(t(a.desc))}</span></button>`
-    );
+    const apps = DEPLOY.APPS.map((a) => {
+      const sp = depSupport(a);
+      const installed = !!depSt.ver[a.id];
+      const na = !sp.ok && !installed; // chưa cài và không hợp hệ điều hành: khoá; đã cài thì vẫn mở để gỡ
+      return `<button type="button" class="dep-app${na ? " na" : ""}" data-app="${esc(a.id)}"${na ? " disabled" : ""} title="${esc(sp.ok ? t(a.sup) : t(sp.why))}">
+        <span class="dep-ic" style="--bc:${esc(a.color || "#111827")}">${platIcon({ id: a.logo })}</span><b>${esc(a.name)}</b><span class="dep-os${sp.ok ? "" : " bad"}">${esc(sp.ok ? t(a.sup) : t(sp.why))}</span>${depBadge(a.id)}<span class="d">${esc(t(a.desc))}</span></button>`;
+    });
     const soon = DEPLOY.SOON.map(
       (a) => `<div class="dep-app soon"><span class="dep-ic">${a.logo ? platIcon({ id: a.logo }) : icon("server")}</span><b>${esc(a.name)}</b><span class="tag-soon">${t("Sắp có")}</span></div>`
     );
@@ -1102,21 +1116,23 @@
   }
   // Máy đích là macOS (Homebrew)? Khi đó Redis có thêm lựa chọn biên dịch từ mã nguồn.
   const depMac = () => depSt.pm === "brew" || depSt.pm === "mac";
-  const depHasMethod = () => dep.mode !== "uninstall" && depSt.pm === "brew" && dep.app && dep.app.id === "redis";
+  const depHasMethod = () => dep.mode !== "uninstall" && depPm() === "brew" && dep.app && dep.app.id === "redis";
   // Có danh sách phiên bản để chọn không?
+  const id0 = () => (dep.app ? dep.app.id : "");
   function depVerVisible() {
     if (dep.mode === "uninstall") return false;
+    if (depPm() === "win") return id0() !== "docker";
     if (!depMac()) return true;
     const id = dep.app.id;
     if (id === "postgres") return true;
-    if (id === "redis") return depSt.pm === "mac" || dep.method === "source";
+    if (id === "redis") return depPm() === "mac" || dep.method === "source";
     if (id === "docker" || id === "nginx") return false; // trên macOS: Homebrew chỉ cài bản mới nhất
     return true;
   }
   function depEffVer() { return depVerVisible() ? dep.ver : ""; }
   // Ghi chú dưới ô chọn: { txt, warn }
   function depPinWarn() {
-    const pm = depSt.pm, id = dep.app.id, v = dep.ver;
+    const pm = depPm(), id = dep.app.id, v = dep.ver;
     if (dep.mode === "uninstall" && ["k8s", "calico", "argocd", "harbor"].includes(id)) {
       const T2 = {
         k8s: "Gỡ cài đặt sẽ xoá vĩnh viễn cluster Kubernetes trên máy này: toàn bộ workload, dữ liệu etcd, chứng chỉ và cấu hình. Không khôi phục được.",
@@ -1134,9 +1150,19 @@
           : t("Gỡ cài đặt sẽ xoá vĩnh viễn {n} cùng dữ liệu và cấu hình của nó trên máy này. Không khôi phục được, hãy sao lưu trước.", { n: dep.app.name }), warn: true };
     }
     if (!pm) return { txt: "", warn: false };
+    if (pm === "win" && dep.mode !== "uninstall") {
+      const WI = {
+        docker: "Windows cài Docker Desktop bằng winget (bản mới nhất, không chọn được phiên bản). Cần bật WSL2 hoặc Hyper-V và có thể phải khởi động lại máy.",
+        postgres: "Cài bằng winget (gói EDB), mật khẩu postgres tự sinh và in ra một lần ở cuối. Script đặt listen_addresses = localhost nếu có quyền quản trị.",
+        nginx: "Tải bản zip chính thức từ nginx.org vào thư mục của bạn, chỉ nghe 127.0.0.1:80, chạy dưới tài khoản của bạn (không phải dịch vụ Windows).",
+        calico: "Cần kubectl và một cluster đang chạy. Script hiển thị tên cluster của kubectl hiện tại trước khi hỏi xác nhận.",
+        argocd: "Cần kubectl và một cluster đang chạy. Giữ ClusterIP: truy cập bằng port-forward.",
+      };
+      const sp0 = depSupport(dep.app);
+      if (sp0.ok && WI[id]) return { txt: t(WI[id]), warn: false };
+    }
+    { const sp = depSupport(dep.app); if (!sp.ok) return { txt: t(sp.why) + " " + t("Bạn vẫn có thể chuyển sang “Gỡ cài đặt” nếu đã cài."), warn: true }; }
     if (["k8s", "calico", "argocd", "harbor"].includes(id)) {
-      if ((id === "k8s" || id === "harbor") && depMac())
-        return { txt: t("{n} chỉ cài được trên Linux, máy này là macOS.", { n: dep.app.name }), warn: true };
       const INFO = {
         k8s: "Sẽ tắt swap, nạp module kernel, cài containerd + kubeadm rồi chạy kubeadm init (pod CIDR 192.168.0.0/16). Nên giới hạn cổng API 6443 bằng firewall. Sau khi cài, node chưa Ready cho tới khi cài Calico.",
         calico: "Cần một cluster Kubernetes đang chạy. Script hiển thị tên cluster của kubectl hiện tại trước khi hỏi xác nhận.",
@@ -1174,7 +1200,7 @@
     depSyncMode();
     $("#depMethod").innerHTML = [["brew", "Homebrew (bản mới nhất, nhanh)"], ["source", "Biên dịch từ mã nguồn (chọn được phiên bản)"]]
       .map(([k, l]) => `<button type="button" data-m="${k}" class="${dep.method === k ? "on" : ""}">${esc(t(l))}</button>`).join("");
-    $("#depScript").value = DEPLOY.script(dep.app.id, depEffVer(), depHasMethod() ? dep.method : "", dep.mode, dep.params);
+    $("#depScript").value = DEPLOY.script(dep.app.id, depEffVer(), depHasMethod() ? dep.method : "", dep.mode, dep.params, depOs());
     document.querySelectorAll("#depVer button").forEach((b) => b.classList.toggle("on", b.dataset.v === dep.ver));
   }
   // tên cần gõ để xác nhận: server (nếu cài lên server), hoặc tên ứng dụng khi gỡ trên máy này
@@ -1196,7 +1222,8 @@
   function depCheckConfirm() {
     const need = depNeedName();
     const typed = $("#depConfirm").value.trim();
-    $("#depGo").disabled = !depParamsOk() || (!!need && (depHost() ? typed !== need : typed.toLowerCase() !== need.toLowerCase()));
+    const sup = depSupport(dep.app);
+    $("#depGo").disabled = (dep.mode !== "uninstall" && !sup.ok) || !depParamsOk() || (!!need && (depHost() ? typed !== need : typed.toLowerCase() !== need.toLowerCase()));
   }
   function depSyncMode() {
     const un = dep.mode === "uninstall";
@@ -1301,7 +1328,7 @@
       dep.id = await invoke("deploy_run", {
         hostId: h ? h.id : null,
         accountId: h ? depAcc() || null : null,
-        script: DEPLOY.script(dep.app.id, depEffVer(), depHasMethod() ? dep.method : "", dep.mode, dep.params),
+        script: DEPLOY.script(dep.app.id, depEffVer(), depHasMethod() ? dep.method : "", dep.mode, dep.params, depOs()),
         cols: dep.term.cols,
         rows: dep.term.rows,
       });

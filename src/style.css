@@ -611,3 +611,8 @@ body::after { bottom: 0; background: linear-gradient(to top, var(--bg), rgba(244
 #depPwRow input { flex: 1; }
 #depTermBox > summary { cursor: pointer; font-size: 13px; color: #6b7280; margin-top: 12px; user-select: none; }
 #depTermBox[open] > summary { margin-bottom: 10px; }
+.dep-os { display: inline-block; justify-self: start; font-size: 11px; font-weight: 600; color: #374151; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 99px; padding: 2px 9px; }
+.dep-os.bad { color: #7c2d12; background: #fef3c7; border-color: #f59e0b; }
+.dep-app.na { opacity: .55; cursor: not-allowed; }
+.dep-app.na:hover { border-color: #e5e7eb; transform: none; }
+.dep-app .dep-ic { background: color-mix(in srgb, var(--bc, #111827) 13%, #fff); color: var(--bc, #111827); border: 1px solid color-mix(in srgb, var(--bc, #111827) 28%, #fff); }

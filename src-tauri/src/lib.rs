@@ -1820,6 +1820,32 @@ fn spawn_pty(app: &tauri::AppHandle, mut cmd: CommandBuilder, cols: u16, rows: u
     Ok(id)
 }
 
+/// Mã hoá script cho `powershell -EncodedCommand` (UTF-16LE rồi base64).
+#[cfg(windows)]
+fn ps_encode(script: &str) -> String {
+    let bytes: Vec<u8> = script.encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
+    B64.encode(bytes)
+}
+
+/// Kiểm tra ứng dụng đã cài trên Windows (PowerShell). Cùng định dạng `tên=chuỗi phiên bản` như DETECT_SCRIPT.
+#[allow(dead_code)]
+const DETECT_PS: &str = r#"$ErrorActionPreference = 'SilentlyContinue'
+function V($exe, $a) { if (Get-Command $exe) { (& $exe @a 2>&1 | Select-Object -First 1) } }
+"pm=win"
+"docker=" + (V 'docker' @('--version'))
+$pg = Get-ChildItem 'C:\Program Files\PostgreSQL\*\bin\psql.exe' | Sort-Object { [int]$_.Directory.Parent.Name } -Descending | Select-Object -First 1
+if ($pg) { "postgres=" + (& $pg.FullName --version 2>&1 | Select-Object -First 1) } else { "postgres=" + (V 'psql' @('--version')) }
+$ng = Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\nginx-*\nginx.exe') | Sort-Object FullName -Descending | Select-Object -First 1
+if ($ng) { "nginx=" + (& $ng.FullName -v 2>&1 | Select-Object -First 1) } else { "nginx=" + (V 'nginx' @('-v')) }
+"redis="
+"k8s="
+if (Get-Command kubectl) {
+  "calico=" + (kubectl --request-timeout=5s -n kube-system get ds calico-node -o jsonpath='{.spec.template.spec.containers[0].image}' 2>$null | Select-Object -First 1)
+  "argocd=" + (kubectl --request-timeout=5s -n argocd get deploy argocd-server -o jsonpath='{.spec.template.spec.containers[0].image}' 2>$null | Select-Object -First 1)
+}
+"harbor="
+"#;
+
 const DETECT_SCRIPT: &str = r#"export PATH="$PATH:/usr/local/bin:/opt/homebrew/bin:/opt/local/bin:/usr/sbin:/snap/bin:/Applications/Postgres.app/Contents/Versions/latest/bin"
 for d in /usr/pgsql-*/bin /usr/lib/postgresql/*/bin /opt/homebrew/opt/postgresql@*/bin /opt/local/lib/postgresql*/bin; do [ -d "$d" ] && PATH="$PATH:$d"; done
 v() { if command -v "$1" >/dev/null 2>&1; then "$@" 2>&1 | head -1; fi; }
@@ -1880,7 +1906,11 @@ async fn deploy_detect(
             #[cfg(windows)]
             {
                 let _ = &app;
-                return Err("Windows chưa hỗ trợ kiểm tra trực tiếp trên máy này.".to_string());
+                let enc = ps_encode(DETECT_PS);
+                let mut c = new_cmd("powershell.exe");
+                c.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", enc.as_str()]);
+                let o = run_cmd(c, None)?;
+                return Ok(o.stdout);
             }
             #[cfg(not(windows))]
             {
@@ -2127,8 +2157,13 @@ async fn deploy_run(
         None => {
             #[cfg(windows)]
             {
-                let _ = (&app, &script, cols, rows);
-                return Err("Windows chưa hỗ trợ cài trực tiếp trên máy này. Hãy chọn một SSH host (Linux).".into());
+                let enc = ps_encode(&script);
+                if enc.len() > 30_000 {
+                    return Err("Script quá dài để chạy trên Windows".into());
+                }
+                let mut cmd = CommandBuilder::new("powershell.exe");
+                cmd.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", enc.as_str()]);
+                return spawn_pty(&app, cmd, cols, rows);
             }
             #[cfg(not(windows))]
             {
