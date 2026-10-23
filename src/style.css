@@ -616,3 +616,5 @@ body::after { bottom: 0; background: linear-gradient(to top, var(--bg), rgba(244
 .dep-app.na { opacity: .55; cursor: not-allowed; }
 .dep-app.na:hover { border-color: #e5e7eb; transform: none; }
 .dep-app .dep-ic { background: color-mix(in srgb, var(--bc, #111827) 13%, #fff); color: var(--bc, #111827); border: 1px solid color-mix(in srgb, var(--bc, #111827) 28%, #fff); }
+.dep-app .dep-ic.img { background: #fff; border-color: #e5e7eb; }
+.dep-app .dep-ic img { width: 24px; height: 26px; object-fit: contain; }

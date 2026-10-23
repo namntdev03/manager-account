@@ -1060,7 +1060,7 @@
       const installed = !!depSt.ver[a.id];
       const na = !sp.ok && !installed; // chưa cài và không hợp hệ điều hành: khoá; đã cài thì vẫn mở để gỡ
       return `<button type="button" class="dep-app${na ? " na" : ""}" data-app="${esc(a.id)}"${na ? " disabled" : ""} title="${esc(sp.ok ? t(a.sup) : t(sp.why))}">
-        <span class="dep-ic" style="--bc:${esc(a.color || "#111827")}">${platIcon({ id: a.logo })}</span><b>${esc(a.name)}</b><span class="dep-os${sp.ok ? "" : " bad"}">${esc(sp.ok ? t(a.sup) : t(sp.why))}</span>${depBadge(a.id)}<span class="d">${esc(t(a.desc))}</span></button>`;
+        <span class="dep-ic${a.img ? " img" : ""}" style="--bc:${esc(a.color || "#111827")}">${a.img ? `<img src="${esc(a.img)}" alt="" />` : platIcon({ id: a.logo })}</span><b>${esc(a.name)}</b><span class="dep-os${sp.ok ? "" : " bad"}">${esc(sp.ok ? t(a.sup) : t(sp.why))}</span>${depBadge(a.id)}<span class="d">${esc(t(a.desc))}</span></button>`;
     });
     const soon = DEPLOY.SOON.map(
       (a) => `<div class="dep-app soon"><span class="dep-ic">${a.logo ? platIcon({ id: a.logo }) : icon("server")}</span><b>${esc(a.name)}</b><span class="tag-soon">${t("Sắp có")}</span></div>`

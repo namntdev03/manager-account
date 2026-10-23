@@ -1027,7 +1027,7 @@ Write-Host "##P done"
       script: K8S, uninstall: K8S_UN,
     },
     {
-      id: "calico", color: "#F58220", sup: "Mọi OS có kubectl", only: "", name: "Calico", logo: "calico", os: "Cluster Kubernetes",
+      id: "calico", img: "assets/calico.png", color: "#F58220", sup: "Mọi OS có kubectl", only: "", name: "Calico", logo: "calico", os: "Cluster Kubernetes",
       desc: "Plugin mạng (CNI) cho cluster, cài bằng manifest chính thức",
       versions: [{ v: "3.33.0", label: "3.33.0" }, { v: "3.32.2", label: "3.32.2" }, { v: "3.31.7", label: "3.31.7" }, { v: "3.30.7", label: "3.30.7" }],
       script: CALICO, uninstall: CALICO_UN, win: { script: CALICO_WIN, uninstall: CALICO_WIN_UN },
