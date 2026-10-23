@@ -1090,7 +1090,7 @@
       ? t("Cài trên server qua SSH. Script chạy trong một terminal ngay trong app, bạn thấy từng dòng và có thể gõ mật khẩu sudo.")
       : /Win/i.test(navigator.platform)
         ? t("Windows chưa hỗ trợ cài trực tiếp trên máy này. Hãy chọn một SSH host (Linux).")
-        : t("Cài trực tiếp lên máy đang dùng app (macOS dùng Homebrew, Linux dùng apt/dnf).");
+        : t("Cài trực tiếp lên máy đang dùng app (macOS dùng Homebrew, Linux dùng apt/dnf, Windows dùng winget).");
     renderDepGrid();
     depDetect(false);
     depLoadVersions(false);

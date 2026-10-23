@@ -149,7 +149,7 @@
     "Máy này (local)": "This machine (local)",
     "Cài trên server qua SSH. Script chạy trong một terminal ngay trong app, bạn thấy từng dòng và có thể gõ mật khẩu sudo.": "Installs on the server over SSH. The script runs in a terminal inside the app, so you see every line and can type the sudo password.",
     "Windows chưa hỗ trợ cài trực tiếp trên máy này. Hãy chọn một SSH host (Linux).": "Windows cannot install directly on this machine yet. Choose an SSH host (Linux).",
-    "Cài trực tiếp lên máy đang dùng app (macOS dùng Homebrew, Linux dùng apt/dnf).": "Installs directly on the machine running the app (macOS uses Homebrew, Linux uses apt/dnf).",
+    "Cài trực tiếp lên máy đang dùng app (macOS dùng Homebrew, Linux dùng apt/dnf, Windows dùng winget).": "Installs directly on the machine running the app (macOS uses Homebrew, Linux uses apt/dnf, Windows uses winget).",
     "Sắp có": "Coming soon",
     "Cài {n}": "Install {n}",
     "Lên server {h}": "To server {h}",
