@@ -221,7 +221,7 @@
       ? esc(p.scope || t("Registry mặc định"))
       : isSshAcc
         ? esc(p.login)
-        : `${esc(p.user_name)} &lt;${esc(p.user_email)}&gt;`;
+        : "";
     return `<article class="glass-card acc ${active ? "active" : ""}" data-id="${esc(p.id)}">
       <div>
         <div class="acc-top">
@@ -231,7 +231,7 @@
             : `<span class="badge soft">${isK8s ? "kubeconfig" : isSvc ? (p.kind === "argocd" ? "Token" : p.kind === "harbor" ? t("Mật khẩu / robot") : "Docker") : isNpm ? "npm" : isSshAcc ? (p.ssh_key_path && p.has_token ? t("Key + mật khẩu") : p.has_token ? t("Mật khẩu") : "SSH key") : isSsh ? "SSH key" : "Token"}</span>`}
         </div>
         <div class="acc-name">${esc(p.name)}${(isK8s || isSvc) && p.env ? ` <span class="env env-${esc(p.env)}">${ENV_LABEL[p.env] || ""}</span>` : ""}</div>
-        <div class="acc-sub">${subLine}</div>
+        ${subLine ? `<div class="acc-sub">${subLine}</div>` : ""}
         <div class="acc-detail" title="${esc(detail)}">${isK8s || isSvc ? platIcon(platOfP(p)) : icon(isSsh || isSshAcc ? "key" : "globe")}<span>${esc(detail)}</span></div>
       </div>
       <div class="acc-actions">
