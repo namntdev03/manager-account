@@ -1,6 +1,6 @@
 {
   "name": "manager-account",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
   "packageManager": "pnpm@9.15.0",
