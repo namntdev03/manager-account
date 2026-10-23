@@ -3160,6 +3160,20 @@ async fn apply_profile(
     t.set("user.email", &p.user_email)?;
     log.push(format!("[{where_}] user.name = {}", p.user_name));
     log.push(format!("[{where_}] user.email = {}", p.user_email));
+    // Chế độ toàn máy: cấu hình ghi đè (includeIf trong ~/.gitconfig) làm commit trong thư mục đó
+    // mang tên khác tài khoản vừa chọn -> báo rõ để người dùng biết.
+    if t.repo.is_none() {
+        let inc = cfg_get(None, true, &["--get-regexp", r"^includeif\..*\.path$"]);
+        for l in inc.lines().map(str::trim).filter(|l| !l.is_empty()) {
+            let cond = l
+                .split_once(' ')
+                .map(|(k, _)| k.trim_start_matches("includeif.").trim_end_matches(".path"))
+                .unwrap_or(l);
+            log.push(format!(
+                "Cảnh báo: ~/.gitconfig có includeIf \"{cond}\" - thư mục khớp điều kiện này có thể vẫn commit bằng tên/email khác tài khoản vừa chọn."
+            ));
+        }
+    }
 
     let cred_key = format!("credential.https://{}.username", p.host);
     if p.auth == "ssh" {
